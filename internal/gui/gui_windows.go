@@ -209,6 +209,11 @@ func utf16PtrFromString(s string) *uint16 {
 	return p
 }
 
+// negInt converts a negative int to uintptr for Win32 API calls
+func negInt(n int) uintptr {
+	return uintptr(int32(n))
+}
+
 func Run(projectList []projects.Project) {
 	allProjects = projectList
 	filteredProjects = projectList
@@ -329,10 +334,34 @@ func wndProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 func createControls(hwnd uintptr) {
 	hInstance, _, _ := procGetModuleHandleW.Call(0)
 
-	// Create font
+	// Create font with proper quality settings
+	// CreateFontW parameters:
+	// Height, Width, Escapement, Orientation, Weight,
+	// Italic, Underline, StrikeOut, CharSet,
+	// OutputPrecision, ClipPrecision, Quality, PitchAndFamily, FaceName
+	const (
+		FW_NORMAL           = 400
+		DEFAULT_CHARSET     = 1
+		OUT_DEFAULT_PRECIS  = 0
+		CLIP_DEFAULT_PRECIS = 0
+		CLEARTYPE_QUALITY   = 5
+		DEFAULT_PITCH       = 0
+		FF_DONTCARE         = 0
+	)
 	hFont, _, _ = procCreateFontW.Call(
-		uintptr(uint32(0xFFFFFFEC)), // -20 for ~15pt font
-		0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 0, 0,
+		negInt(-18),                 // Height (negative for character height)
+		0,                           // Width (0 = default aspect ratio)
+		0,                           // Escapement
+		0,                           // Orientation
+		FW_NORMAL,                   // Weight
+		0,                           // Italic
+		0,                           // Underline
+		0,                           // StrikeOut
+		DEFAULT_CHARSET,             // CharSet
+		OUT_DEFAULT_PRECIS,          // OutputPrecision
+		CLIP_DEFAULT_PRECIS,         // ClipPrecision
+		CLEARTYPE_QUALITY,           // Quality - ClearType for smooth fonts
+		DEFAULT_PITCH|FF_DONTCARE,   // PitchAndFamily
 		uintptr(unsafe.Pointer(utf16PtrFromString("Segoe UI"))),
 	)
 
