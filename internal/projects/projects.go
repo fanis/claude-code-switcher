@@ -2,6 +2,7 @@ package projects
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -34,6 +35,9 @@ type SessionEntry struct {
 	ProjectPath string `json:"projectPath"`
 }
 
+// ErrNoProjects indicates the .claude/projects directory doesn't exist
+var ErrNoProjects = fmt.Errorf("no Claude Code projects found")
+
 // LoadProjects loads all Claude Code projects from ~/.claude/projects/
 func LoadProjects() ([]Project, error) {
 	homeDir, err := os.UserHomeDir()
@@ -44,7 +48,14 @@ func LoadProjects() ([]Project, error) {
 	projectsDir := filepath.Join(homeDir, ".claude", "projects")
 	entries, err := os.ReadDir(projectsDir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, ErrNoProjects
+		}
 		return nil, err
+	}
+
+	if len(entries) == 0 {
+		return nil, ErrNoProjects
 	}
 
 	var projects []Project
@@ -128,36 +139,106 @@ func loadProjectInfo(filePath string) (string, time.Time, error) {
 
 // decodePath converts an encoded path like "c--work-root-project" to a path
 // This is a fallback when sessions-index.json is not available
+// Since we can't distinguish path separators from literal hyphens in folder names,
+// we try multiple interpretations and verify against the filesystem
 func decodePath(encoded string) string {
 	if encoded == "" {
 		return ""
 	}
 
 	// The encoding uses double dashes to separate the drive from the rest
-	// and single dashes within sections for path separators
+	// Single dashes could be path separators OR literal hyphens in folder names
 	// Example: "c--work-root-project" -> "c:\work\root\project"
-	// Example: "C--Users-micro" -> "C:\Users\micro"
+	// Example: "c--install-headlines-neutralizer" could be:
+	//   "c:\install\headlines\neutralizer" OR "c:\install\headlines-neutralizer"
 
 	parts := strings.Split(encoded, "--")
 	if len(parts) < 1 {
 		return ""
 	}
 
-	// First part is the drive letter
-	result := parts[0] + ":"
+	// Drive only case (e.g., "c")
+	if len(parts) == 1 {
+		return parts[0] + ":"
+	}
 
-	for i := 1; i < len(parts); i++ {
-		part := parts[i]
-		// Single dashes within a section are path separators
-		subParts := strings.Split(part, "-")
-		for _, subPart := range subParts {
-			if subPart != "" {
-				result += string(filepath.Separator) + subPart
-			}
+	// First part is the drive letter
+	drive := parts[0] + ":"
+
+	// Get the path portion (everything after --)
+	pathPart := strings.Join(parts[1:], "--") // Rejoin in case there were multiple --
+
+	// Try to find a valid path by testing different interpretations
+	path := findValidPath(drive, pathPart)
+	if path != "" {
+		return path
+	}
+
+	// Fallback: simple dash-to-separator conversion (original behavior)
+	result := drive
+	segments := strings.Split(pathPart, "-")
+	for _, seg := range segments {
+		if seg != "" {
+			result += string(filepath.Separator) + seg
+		}
+	}
+	return result
+}
+
+// findValidPath tries different interpretations of the encoded path
+// and returns the first one that exists on disk
+func findValidPath(drive, pathPart string) string {
+	segments := strings.Split(pathPart, "-")
+	if len(segments) == 0 {
+		return ""
+	}
+
+	// Try all possible groupings of segments
+	// Start with most likely: each segment is a folder (original behavior)
+	// Then try: last N segments are one folder name with hyphens
+	// Then try: all segments are one folder name
+
+	// Generate candidate paths by trying different groupings
+	candidates := generatePathCandidates(drive, segments)
+
+	for _, candidate := range candidates {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
 		}
 	}
 
-	return result
+	return ""
+}
+
+// generatePathCandidates generates possible path interpretations
+// prioritizing more likely folder structures
+func generatePathCandidates(drive string, segments []string) []string {
+	var candidates []string
+	n := len(segments)
+
+	if n == 0 {
+		return candidates
+	}
+
+	// Try: all segments as separate folders (most common)
+	path := drive
+	for _, seg := range segments {
+		path += string(filepath.Separator) + seg
+	}
+	candidates = append(candidates, path)
+
+	// Try: last 2+ segments joined with hyphens (e.g., "headlines-neutralizer")
+	for joinFrom := n - 2; joinFrom >= 0; joinFrom-- {
+		path := drive
+		for i := 0; i < joinFrom; i++ {
+			path += string(filepath.Separator) + segments[i]
+		}
+		joined := strings.Join(segments[joinFrom:], "-")
+		path += string(filepath.Separator) + joined
+		candidates = append(candidates, path)
+	}
+
+	return candidates
 }
 
 // SortByLastUsed sorts projects by last used time (most recent first)

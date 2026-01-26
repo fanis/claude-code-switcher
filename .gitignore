@@ -5,6 +5,9 @@
 *.so
 *.dylib
 
+# Build output
+dist/
+
 # Test binary
 *.test
 
@@ -23,3 +26,9 @@ go.work
 # OS
 .DS_Store
 Thumbs.db
+
+# Debug log
+claude-switcher-debug.log
+
+# Windows artifacts
+nul

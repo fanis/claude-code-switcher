@@ -1,3 +1,3 @@
-module github.com/fhatzidakis/claude-code-switcher
+module github.com/fanis/claude-code-switcher
 
 go 1.25.5
