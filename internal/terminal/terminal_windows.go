@@ -15,8 +15,11 @@ import (
 // OpenInWindowsTerminal opens Windows Terminal (or cmd.exe fallback) with the given directory
 // and executes 'claude' command
 func OpenInWindowsTerminal(projectPath string) error {
+	logDebug("OpenInWindowsTerminal called for: %s", projectPath)
+
 	// Check if claude is installed
 	claudePath := findClaude()
+	logDebug("findClaude returned: %s", claudePath)
 	if claudePath == "" {
 		showErrorDialog("Claude Code Not Found",
 			"Claude Code executable was not found.\n\n"+
@@ -132,39 +135,55 @@ func findWindowsTerminal() string {
 
 // findClaude returns full path to claude executable, or empty string if not found
 func findClaude() string {
-	// Try to find via PATH first (works when launched from proper shell)
-	if path, err := exec.LookPath("claude"); err == nil {
-		return path
-	}
-
-	// Check common installation locations
+	// Check common installation locations first (fast, predictable paths)
+	// This avoids exec.LookPath which can hang if PATH contains network drives
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
+		logDebug("findClaude: failed to get home dir: %v", err)
 		return ""
 	}
 
-	locations := []string{
-		// Official installer location
+	appData := os.Getenv("APPDATA")
+
+	var locations []string
+
+	// Official installer location
+	locations = append(locations,
 		filepath.Join(homeDir, ".local", "bin", "claude.exe"),
 		filepath.Join(homeDir, ".local", "bin", "claude"),
-		// npm global install
-		filepath.Join(os.Getenv("APPDATA"), "npm", "claude.cmd"),
-		filepath.Join(os.Getenv("APPDATA"), "npm", "claude"),
-		// scoop install
-		filepath.Join(homeDir, "scoop", "shims", "claude.exe"),
-		filepath.Join(homeDir, "scoop", "shims", "claude.cmd"),
-		// chocolatey install
-		`C:\ProgramData\chocolatey\bin\claude.exe`,
-		`C:\ProgramData\chocolatey\bin\claude.cmd`,
+	)
+
+	// npm global install (only if APPDATA is set)
+	if appData != "" {
+		locations = append(locations,
+			filepath.Join(appData, "npm", "claude.cmd"),
+			filepath.Join(appData, "npm", "claude"),
+		)
 	}
 
+	// scoop install
+	locations = append(locations,
+		filepath.Join(homeDir, "scoop", "shims", "claude.exe"),
+		filepath.Join(homeDir, "scoop", "shims", "claude.cmd"),
+	)
+
+	// chocolatey install
+	locations = append(locations,
+		`C:\ProgramData\chocolatey\bin\claude.exe`,
+		`C:\ProgramData\chocolatey\bin\claude.cmd`,
+	)
+
 	for _, loc := range locations {
-		if loc == "" {
-			continue
-		}
+		logDebug("findClaude: checking %s", loc)
 		if _, err := os.Stat(loc); err == nil {
 			return loc
 		}
+	}
+
+	// Last resort: try PATH lookup (may be slow if PATH has network drives)
+	logDebug("findClaude: trying exec.LookPath")
+	if path, err := exec.LookPath("claude"); err == nil {
+		return path
 	}
 
 	return ""
