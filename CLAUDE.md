@@ -40,9 +40,8 @@ Windows-only native GUI application written in Go. Reads Claude Code project dat
 
 Uses ShellExecute API (not exec.Command) to launch terminals. Finds claude's full path since app launchers like Everything/Keypirinha don't inherit the user's PATH.
 
-Claude path search order:
-1. `exec.LookPath("claude")` - works when launched from shell with proper PATH
-2. `~/.local/bin/claude.exe` - official installer location
+Claude path search order (checked in this order to avoid PATH lookup delays):
+1. `~/.local/bin/claude.exe` - official installer location
 3. `%APPDATA%/npm/claude.cmd` - npm global install
 4. `~/scoop/shims/claude.exe` - scoop install
 5. `C:/ProgramData/chocolatey/bin/claude.exe` - chocolatey install
@@ -68,3 +67,16 @@ Project paths are encoded in directory names like `c--install-headlines-neutrali
 - Shows error dialog if Claude Code executable not found
 - Shows error dialog if no projects exist (`.claude/projects/` missing or empty)
 - Shows error dialog if project directory was moved/deleted
+
+## Deployment
+
+See [DEPLOY.md](DEPLOY.md) for full procedure. Summary:
+
+1. Update `CHANGELOG.md` with new version and changes
+2. Update version in `README.md`
+3. Commit changes
+4. Commit "Release X.Y.Z"
+5. Tag with `X.Y.Z` (no `v` prefix - required for GitHub Actions)
+6. Push commits and tag
+
+Tag format must be `X.Y.Z` (e.g., `0.1.1`) to trigger the release workflow.
