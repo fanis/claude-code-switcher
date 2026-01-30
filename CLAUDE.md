@@ -22,8 +22,8 @@ Windows-only native GUI application written in Go. Reads Claude Code project dat
 
 ### Package Structure
 
-- `main.go` - Entry point: loads projects, runs GUI
-- `internal/projects/` - Reads `~/.claude/projects/*/sessions-index.json`, decodes paths from encoded directory names (e.g., `c--work-project` -> `c:\work\project`)
+- `main.go` - Entry point: locks OS thread (`runtime.LockOSThread`), loads projects, runs GUI
+- `internal/projects/` - Reads `~/.claude/projects/*/sessions-index.json`, extracts cwd from session `.jsonl` files, or decodes paths from encoded directory names (e.g., `c--work-project` -> `c:\work\project`). Validates path existence on disk.
 - `internal/gui/` - Native Win32 GUI via syscall (user32, gdi32, kernel32). Owner-drawn listbox with custom item rendering. Subclasses edit control for keyboard navigation (arrows/Enter/Escape)
 - `internal/fuzzy/` - Fuzzy string matching with scoring (consecutive bonus, word boundary bonus, start-of-text bonus)
 - `internal/terminal/` - Launches Windows Terminal via ShellExecute API. Falls back to cmd.exe if wt.exe not found
@@ -34,6 +34,7 @@ Windows-only native GUI application written in Go. Reads Claude Code project dat
 - All `*_windows.go` files use `//go:build windows` tag
 - Win32 API calls via syscall.NewLazyDLL/NewProc pattern
 - GUI uses message pump with GetMessageW/TranslateMessage/DispatchMessageW loop
+- `runtime.LockOSThread()` in main - required for Win32 GUI, prevents Go from rescheduling the goroutine to a different OS thread
 - Project paths encoded as `<drive>--<path-segments-with-dashes>` in Claude's data directory
 
 ### Terminal Launching
@@ -50,12 +51,14 @@ Windows Terminal syntax: `wt.exe -d "path" -- "claude.exe"`. The `--` separator 
 
 Fallback: `cmd.exe /k cd /d "path" && "claude.exe"` when wt.exe not found. Shows info dialog suggesting Windows Terminal installation.
 
-### Path Decoding
+### Path Resolution
 
-Project paths are encoded in directory names like `c--install-headlines-neutralizer`. The decoder:
-1. Tries simple dash-to-separator conversion
-2. If path doesn't exist, tries alternative interpretations (e.g., `headlines-neutralizer` as single folder)
-3. Validates against filesystem to find correct path
+Project path resolution order:
+1. `sessions-index.json` `originalPath` field (most reliable)
+2. Session `.jsonl` files `cwd` field (for projects without sessions-index.json)
+3. Filesystem-walking path decoder (last resort)
+
+Claude's path encoding converts both path separators (`\`) and dots (`.`) to hyphens. For example, `c:\work\root\fanis.dev` becomes `c--work-root-fanis-dev`. The decoder walks the filesystem recursively, trying each hyphen as a path separator, literal hyphen, or dot at each directory level to find the actual path.
 
 ### GUI Behavior
 
@@ -63,10 +66,12 @@ Project paths are encoded in directory names like `c--install-headlines-neutrali
 - Sort button toggles between "By: Recent" and "By: Name" (Tab key also toggles)
 - Keyboard shortcuts: arrows to navigate, Enter to open, Escape to close, F1 for About, Ctrl+Backspace to delete word
 - DPI-aware: font sizes and item heights scale with display DPI
-- Custom modal About dialog with clickable GitHub link
+- Custom modal About dialog with version and clickable GitHub link
+- Projects with missing directories shown as "[NOT FOUND]" with gray styling
+- Shows "Opening [project]..." in title bar with disabled UI while launching
+- Error dialogs are owned by the main window (proper z-order)
 - Shows error dialog if Claude Code executable not found
 - Shows error dialog if no projects exist (`.claude/projects/` missing or empty)
-- Shows error dialog if project directory was moved/deleted
 
 ## Deployment
 
@@ -80,3 +85,8 @@ See [DEPLOY.md](DEPLOY.md) for full procedure. Summary:
 6. Push commits and tag
 
 Tag format must be `X.Y.Z` (e.g., `0.1.1`) to trigger the release workflow.
+
+## Workflow
+
+- Before committing/pushing, always update docs (CLAUDE.md, CHANGELOG.md, README.md) first
+- Always show the full diff for review before pushing

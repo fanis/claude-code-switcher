@@ -12,6 +12,14 @@ import (
 	"unsafe"
 )
 
+// parentHwnd is the owner window for message boxes, set via SetParentHwnd
+var parentHwnd uintptr
+
+// SetParentHwnd sets the parent window handle for dialogs shown by this package
+func SetParentHwnd(hwnd uintptr) {
+	parentHwnd = hwnd
+}
+
 // OpenInWindowsTerminal opens Windows Terminal (or cmd.exe fallback) with the given directory
 // and executes 'claude' command
 func OpenInWindowsTerminal(projectPath string) error {
@@ -32,14 +40,6 @@ func OpenInWindowsTerminal(projectPath string) error {
 		return fmt.Errorf("claude executable not found")
 	}
 	logDebug("Found claude at: %s", claudePath)
-
-	// Check if project path exists
-	if _, err := os.Stat(projectPath); os.IsNotExist(err) {
-		showErrorDialog("Project Not Found",
-			"The project directory no longer exists:\n\n"+projectPath+"\n\n"+
-				"It may have been moved or deleted.")
-		return fmt.Errorf("project path not found: %s", projectPath)
-	}
 
 	// Try Windows Terminal first, fall back to cmd.exe
 	wtPath := findWindowsTerminal()
@@ -198,7 +198,7 @@ func showErrorDialog(title, message string) {
 	const MB_ICONERROR = 0x00000010
 
 	messageBox.Call(
-		0,
+		parentHwnd,
 		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(message))),
 		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(title))),
 		MB_OK|MB_ICONERROR,
@@ -214,7 +214,7 @@ func showInfoDialog(title, message string) {
 	const MB_ICONINFORMATION = 0x00000040
 
 	messageBox.Call(
-		0,
+		parentHwnd,
 		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(message))),
 		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(title))),
 		MB_OK|MB_ICONINFORMATION,

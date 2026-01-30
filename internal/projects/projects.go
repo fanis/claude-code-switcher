@@ -16,6 +16,7 @@ type Project struct {
 	Path       string    // Full path to the project directory
 	LastUsed   time.Time // Last modified time
 	InUse      bool      // Whether Claude is currently running in this project
+	PathExists bool      // Whether the project directory exists on disk
 	EncodedDir string    // The encoded directory name in .claude/projects/
 }
 
@@ -65,13 +66,18 @@ func LoadProjects() ([]Project, error) {
 		}
 
 		encodedName := entry.Name()
-		sessionsFile := filepath.Join(projectsDir, encodedName, "sessions-index.json")
+		projectDir := filepath.Join(projectsDir, encodedName)
+		sessionsFile := filepath.Join(projectDir, "sessions-index.json")
 
 		// Try to get project path and last used time from sessions-index.json
 		projectPath, lastUsed, err := loadProjectInfo(sessionsFile)
 		if err != nil {
-			// Fall back to decoding the path from directory name
-			projectPath = decodePath(encodedName)
+			// Try reading cwd from a session .jsonl file
+			projectPath = extractCwdFromSessions(projectDir)
+			if projectPath == "" {
+				// Last resort: decode the path from directory name
+				projectPath = decodePath(encodedName)
+			}
 			if projectPath == "" {
 				continue
 			}
@@ -82,11 +88,13 @@ func LoadProjects() ([]Project, error) {
 			}
 		}
 
+		_, statErr := os.Stat(projectPath)
 		project := Project{
 			Name:       filepath.Base(projectPath),
 			Path:       projectPath,
 			EncodedDir: encodedName,
 			LastUsed:   lastUsed,
+			PathExists: statErr == nil,
 		}
 
 		projects = append(projects, project)
@@ -135,6 +143,56 @@ func loadProjectInfo(filePath string) (string, time.Time, error) {
 	}
 
 	return projectPath, latest, nil
+}
+
+// sessionMessage represents the minimal structure of a session .jsonl entry
+// that contains cwd information
+type sessionMessage struct {
+	Cwd string `json:"cwd"`
+}
+
+// extractCwdFromSessions reads the first .jsonl file in the project directory
+// and extracts the cwd field, which contains the actual project path.
+// This is used when sessions-index.json is not available.
+func extractCwdFromSessions(projectDir string) string {
+	entries, err := os.ReadDir(projectDir)
+	if err != nil {
+		return ""
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
+			continue
+		}
+
+		f, err := os.Open(filepath.Join(projectDir, entry.Name()))
+		if err != nil {
+			continue
+		}
+
+		// Read enough to find the cwd field in the first few lines
+		buf := make([]byte, 4096)
+		n, _ := f.Read(buf)
+		f.Close()
+
+		if n == 0 {
+			continue
+		}
+
+		// Parse each line as JSON looking for cwd
+		for _, line := range strings.Split(string(buf[:n]), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			var msg sessionMessage
+			if err := json.Unmarshal([]byte(line), &msg); err == nil && msg.Cwd != "" {
+				return msg.Cwd
+			}
+		}
+	}
+
+	return ""
 }
 
 // decodePath converts an encoded path like "c--work-root-project" to a path
@@ -186,59 +244,69 @@ func decodePath(encoded string) string {
 }
 
 // findValidPath tries different interpretations of the encoded path
-// and returns the first one that exists on disk
+// and returns the first one that exists on disk.
+//
+// Claude's path encoding converts both path separators (\) and dots (.)
+// to hyphens. For example, "c:\work\root\fanis.dev" becomes
+// "c--work-root-fanis-dev". This function walks the filesystem recursively,
+// trying each hyphen as a path separator, literal hyphen, or dot to find
+// the actual path.
 func findValidPath(drive, pathPart string) string {
 	segments := strings.Split(pathPart, "-")
 	if len(segments) == 0 {
 		return ""
 	}
 
-	// Try all possible groupings of segments
-	// Start with most likely: each segment is a folder (original behavior)
-	// Then try: last N segments are one folder name with hyphens
-	// Then try: all segments are one folder name
+	return resolveSegments(drive, segments)
+}
 
-	// Generate candidate paths by trying different groupings
-	candidates := generatePathCandidates(drive, segments)
+// resolveSegments recursively resolves path segments by trying different
+// joiners (path separator, hyphen, dot) at each level, validating against
+// the filesystem at each step.
+func resolveSegments(basePath string, segments []string) string {
+	if len(segments) == 0 {
+		// All segments consumed - check if this path exists
+		if _, err := os.Stat(basePath); err == nil {
+			return basePath
+		}
+		return ""
+	}
 
-	for _, candidate := range candidates {
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
+	// Try consuming 1..N segments as a single directory/file name.
+	// For each group size, try joining with different separators.
+	for count := 1; count <= len(segments); count++ {
+		group := segments[:count]
+		rest := segments[count:]
+
+		// Try different joiners between segments in this group:
+		// - hyphen (literal hyphen in folder name)
+		// - dot (e.g., "fanis.dev")
+		// For single segments, no joiner needed.
+		var names []string
+		if count == 1 {
+			names = []string{group[0]}
+		} else {
+			hyphenName := strings.Join(group, "-")
+			dotName := strings.Join(group, ".")
+			names = []string{hyphenName, dotName}
+		}
+
+		for _, name := range names {
+			candidate := basePath + string(filepath.Separator) + name
+			if _, err := os.Stat(candidate); err == nil {
+				if len(rest) == 0 {
+					return candidate
+				}
+				// This level exists, recurse for remaining segments
+				result := resolveSegments(candidate, rest)
+				if result != "" {
+					return result
+				}
+			}
 		}
 	}
 
 	return ""
-}
-
-// generatePathCandidates generates possible path interpretations
-// prioritizing more likely folder structures
-func generatePathCandidates(drive string, segments []string) []string {
-	var candidates []string
-	n := len(segments)
-
-	if n == 0 {
-		return candidates
-	}
-
-	// Try: all segments as separate folders (most common)
-	path := drive
-	for _, seg := range segments {
-		path += string(filepath.Separator) + seg
-	}
-	candidates = append(candidates, path)
-
-	// Try: last 2+ segments joined with hyphens (e.g., "headlines-neutralizer")
-	for joinFrom := n - 2; joinFrom >= 0; joinFrom-- {
-		path := drive
-		for i := 0; i < joinFrom; i++ {
-			path += string(filepath.Separator) + segments[i]
-		}
-		joined := strings.Join(segments[joinFrom:], "-")
-		path += string(filepath.Separator) + joined
-		candidates = append(candidates, path)
-	}
-
-	return candidates
 }
 
 // SortByLastUsed sorts projects by last used time (most recent first)

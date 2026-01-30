@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"runtime"
 	"syscall"
 	"unsafe"
 
@@ -9,7 +10,13 @@ import (
 	"github.com/fanis/claude-code-switcher/internal/projects"
 )
 
+const appVersion = "0.1.1"
+
 func main() {
+	// Win32 GUI operations must all happen on the same OS thread.
+	// Without this, Go may reschedule the goroutine to a different thread
+	// between window creation and message processing, crashing on first interaction.
+	runtime.LockOSThread()
 	// Load projects from Claude Code data
 	projectList, err := projects.LoadProjects()
 	if err != nil {
@@ -25,7 +32,7 @@ func main() {
 	}
 
 	// Run the GUI
-	gui.Run(projectList)
+	gui.Run(projectList, appVersion)
 }
 
 func showError(title, message string) {

@@ -119,7 +119,8 @@ const (
 	GWLP_WNDPROC  uintptr = 0xFFFFFFFFFFFFFFFC // -4 as uintptr
 	GWLP_USERDATA uintptr = 0xFFFFFFFFFFFFFFEB // -21 as uintptr
 
-	MB_YESNOCANCEL = 0x00000003
+	MB_YESNOCANCEL  = 0x00000003
+	MB_ICONERROR    = 0x00000010
 	MB_ICONQUESTION = 0x00000020
 	IDYES    = 6
 	IDNO     = 7
@@ -226,6 +227,7 @@ var (
 	sortByName       bool
 	selectedAction   string
 	showingDialog    bool // Prevent close on focus loss while showing dialog
+	appVersion       string
 )
 
 func utf16PtrFromString(s string) *uint16 {
@@ -238,9 +240,10 @@ func negInt(n int) uintptr {
 	return uintptr(int32(n))
 }
 
-func Run(projectList []projects.Project) {
+func Run(projectList []projects.Project, version string) {
 	allProjects = projectList
 	filteredProjects = projectList
+	appVersion = version
 
 	// Initialize common controls
 	var icc INITCOMMONCONTROLSEX
@@ -272,7 +275,7 @@ func Run(projectList []projects.Project) {
 	y := (int(screenHeight) - windowHeight) / 2
 
 	hwnd, _, _ := procCreateWindowExW.Call(
-		WS_EX_TOPMOST,
+		0,
 		uintptr(unsafe.Pointer(className)),
 		uintptr(unsafe.Pointer(utf16PtrFromString("Claude Code Switcher"))),
 		WS_OVERLAPPEDWINDOW,
@@ -282,6 +285,7 @@ func Run(projectList []projects.Project) {
 	)
 
 	mainHwnd = hwnd
+	terminal.SetParentHwnd(hwnd)
 
 	procShowWindow.Call(hwnd, SW_SHOW)
 	procUpdateWindow.Call(hwnd)
@@ -613,6 +617,10 @@ func drawListItem(dis *DRAWITEMSTRUCT) {
 		bgColor = 0x00CC7A00       // Nice blue (#007ACC in RGB)
 		textColor = 0x00FFFFFF     // White
 		secondaryColor = 0x00E0E0E0 // Light gray
+	} else if !proj.PathExists {
+		bgColor = 0x00F0F0F0       // Light gray background
+		textColor = 0x00808080     // Gray text
+		secondaryColor = 0x00A0A0A0 // Lighter gray
 	} else {
 		bgColor = 0x00FFFFFF       // White
 		textColor = 0x00202020     // Near black
@@ -634,7 +642,9 @@ func drawListItem(dis *DRAWITEMSTRUCT) {
 	nameRect.Bottom = nameRect.Top + scale(18)
 
 	nameText := proj.Name
-	if proj.InUse {
+	if !proj.PathExists {
+		nameText = "[NOT FOUND] " + nameText
+	} else if proj.InUse {
 		nameText = "[ACTIVE] " + nameText
 	}
 	drawText(dis.HDC, nameText, &nameRect, DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
@@ -815,10 +825,14 @@ func showAboutDialog() {
 
 func createAboutControls(hwnd uintptr, hInstance uintptr) {
 	// Title
+	titleText := "Claude Code Switcher"
+	if appVersion != "" {
+		titleText += " v" + appVersion
+	}
 	titleHwnd, _, _ := procCreateWindowExW.Call(
 		0,
 		uintptr(unsafe.Pointer(utf16PtrFromString("STATIC"))),
-		uintptr(unsafe.Pointer(utf16PtrFromString("Claude Code Switcher"))),
+		uintptr(unsafe.Pointer(utf16PtrFromString(titleText))),
 		WS_CHILD|WS_VISIBLE|SS_CENTER,
 		10, 10, 280, 20,
 		hwnd, 0, hInstance, 0,
@@ -950,7 +964,16 @@ func onProjectSelected() {
 		return
 	}
 
-	proj := filteredProjects[sel]
+	proj := &filteredProjects[sel]
+
+	// Check if project path exists
+	if !proj.PathExists {
+		showMessageBox(mainHwnd,
+			"The project directory no longer exists:\n\n"+proj.Path+"\n\n"+
+				"It may have been moved or deleted.",
+			"Project Not Found", MB_ICONERROR)
+		return
+	}
 
 	// Check if project is in use
 	if proj.InUse {
@@ -973,6 +996,12 @@ func onProjectSelected() {
 		}
 	}
 
+	// Show opening indication
+	procSetWindowTextW.Call(mainHwnd, uintptr(unsafe.Pointer(utf16PtrFromString(fmt.Sprintf("Opening %s...", proj.Name)))))
+	procEnableWindow.Call(editHwnd, 0)
+	procEnableWindow.Call(listHwnd, 0)
+	procEnableWindow.Call(sortBtnHwnd, 0)
+
 	// Open in Windows Terminal
 	// Set flag to prevent close on focus loss during terminal dialogs
 	showingDialog = true
@@ -980,6 +1009,11 @@ func onProjectSelected() {
 	showingDialog = false
 
 	if err != nil {
+		// Restore UI on failure
+		procSetWindowTextW.Call(mainHwnd, uintptr(unsafe.Pointer(utf16PtrFromString("Claude Code Switcher"))))
+		procEnableWindow.Call(editHwnd, 1)
+		procEnableWindow.Call(listHwnd, 1)
+		procEnableWindow.Call(sortBtnHwnd, 1)
 		showMessageBox(mainHwnd, "Failed to open terminal: "+err.Error(), "Error", 0)
 		return
 	}
