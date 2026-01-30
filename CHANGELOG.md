@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-01-30
+
+### Fixed
+- Fix crash on first interaction after build (add runtime.LockOSThread for Win32 GUI)
+- Fix error dialogs appearing behind main window (proper owner HWND)
+- Fix duplicate error dialog when opening a missing project
+- Fix path decoding for folder names containing dots (e.g., fanis.dev)
+
+### Added
+- Visual "[NOT FOUND]" marker with gray styling for projects whose directories no longer exist
+- "Opening..." indicator in title bar while launching a terminal
+- Version displayed in About dialog
+- Extract project paths from session .jsonl files when sessions-index.json is missing
+- Recursive filesystem-walking path decoder that handles dots and hyphens
+
+### Changed
+- Remove always-on-top (WS_EX_TOPMOST) for standard launcher z-order behavior
+
 ## [0.1.1] - 2026-01-27
 
 ### Fixed

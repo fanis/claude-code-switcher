@@ -2,7 +2,7 @@
 
 A fast, native Windows utility for switching between Claude Code projects. Shows all your Claude Code projects in a popup dialog sorted by most recently used, with fuzzy search filtering.
 
-> **Latest Version**: 0.1.1 | [See What's New](CHANGELOG.md)
+> **Latest Version**: 0.2.0 | [See What's New](CHANGELOG.md)
 
 ## Features
 
