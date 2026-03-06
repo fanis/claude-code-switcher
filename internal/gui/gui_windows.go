@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Fanis Hatzidakis
+// Licensed under PolyForm Internal Use License 1.0.0 - see LICENCE.md
+
 //go:build windows
 
 package gui
@@ -119,12 +122,7 @@ const (
 	GWLP_WNDPROC  uintptr = 0xFFFFFFFFFFFFFFFC // -4 as uintptr
 	GWLP_USERDATA uintptr = 0xFFFFFFFFFFFFFFEB // -21 as uintptr
 
-	MB_YESNOCANCEL  = 0x00000003
 	MB_ICONERROR    = 0x00000010
-	MB_ICONQUESTION = 0x00000020
-	IDYES    = 6
-	IDNO     = 7
-	IDCANCEL = 2
 
 	COLOR_WINDOW     = 5
 	COLOR_HIGHLIGHT  = 13
@@ -225,7 +223,6 @@ var (
 	allProjects      []projects.Project
 	filteredProjects []projects.Project
 	sortByName       bool
-	selectedAction   string
 	showingDialog    bool // Prevent close on focus loss while showing dialog
 	appVersion       string
 )
@@ -644,8 +641,6 @@ func drawListItem(dis *DRAWITEMSTRUCT) {
 	nameText := proj.Name
 	if !proj.PathExists {
 		nameText = "[NOT FOUND] " + nameText
-	} else if proj.InUse {
-		nameText = "[ACTIVE] " + nameText
 	}
 	drawText(dis.HDC, nameText, &nameRect, DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
 
@@ -731,9 +726,6 @@ var (
 )
 
 const (
-	WM_NOTIFY     = 0x004E
-	NM_CLICK      = 0xFFFFFFFE // -2
-	NM_RETURN     = 0xFFFFFFFD // -3
 	WS_POPUP      = 0x80000000
 	WS_CAPTION    = 0x00C00000
 	WS_SYSMENU    = 0x00080000
@@ -777,8 +769,11 @@ func showAboutDialog() {
 	clientToScreen := user32.NewProc("ClientToScreen")
 	clientToScreen.Call(mainHwnd, uintptr(unsafe.Pointer(&pt)))
 
-	dlgWidth := 300
-	dlgHeight := 260
+	dpiScale := func(base int) int {
+		return (base * int(currentDPI)) / 96
+	}
+	dlgWidth := dpiScale(300)
+	dlgHeight := dpiScale(260)
 	dlgX := int(pt.X) + (int(mainRect.Right-mainRect.Left)-dlgWidth)/2
 	dlgY := int(pt.Y) + (int(mainRect.Bottom-mainRect.Top)-dlgHeight)/2
 
@@ -824,6 +819,10 @@ func showAboutDialog() {
 }
 
 func createAboutControls(hwnd uintptr, hInstance uintptr) {
+	s := func(base int) uintptr {
+		return uintptr((base * int(currentDPI)) / 96)
+	}
+
 	// Title
 	titleText := "Claude Code Switcher"
 	if appVersion != "" {
@@ -834,7 +833,7 @@ func createAboutControls(hwnd uintptr, hInstance uintptr) {
 		uintptr(unsafe.Pointer(utf16PtrFromString("STATIC"))),
 		uintptr(unsafe.Pointer(utf16PtrFromString(titleText))),
 		WS_CHILD|WS_VISIBLE|SS_CENTER,
-		10, 10, 280, 20,
+		s(10), s(10), s(280), s(20),
 		hwnd, 0, hInstance, 0,
 	)
 	procSendMessageW.Call(titleHwnd, WM_SETFONT, hFont, 1)
@@ -845,7 +844,7 @@ func createAboutControls(hwnd uintptr, hInstance uintptr) {
 		uintptr(unsafe.Pointer(utf16PtrFromString("STATIC"))),
 		uintptr(unsafe.Pointer(utf16PtrFromString("by Fanis Hatzidakis"))),
 		WS_CHILD|WS_VISIBLE|SS_CENTER,
-		10, 32, 280, 18,
+		s(10), s(32), s(280), s(18),
 		hwnd, 0, hInstance, 0,
 	)
 	procSendMessageW.Call(authorHwnd, WM_SETFONT, hFont, 1)
@@ -862,7 +861,7 @@ func createAboutControls(hwnd uintptr, hInstance uintptr) {
 		uintptr(unsafe.Pointer(utf16PtrFromString("STATIC"))),
 		uintptr(unsafe.Pointer(utf16PtrFromString(shortcutsText))),
 		WS_CHILD|WS_VISIBLE,
-		15, 58, 270, 100,
+		s(15), s(58), s(270), s(100),
 		hwnd, 0, hInstance, 0,
 	)
 	procSendMessageW.Call(shortcutsHwnd, WM_SETFONT, hFont, 1)
@@ -873,7 +872,7 @@ func createAboutControls(hwnd uintptr, hInstance uintptr) {
 		uintptr(unsafe.Pointer(utf16PtrFromString("BUTTON"))),
 		uintptr(unsafe.Pointer(utf16PtrFromString("Open GitHub"))),
 		WS_CHILD|WS_VISIBLE|WS_TABSTOP,
-		15, 185, 100, 26,
+		s(15), s(185), s(100), s(26),
 		hwnd, IDC_ABOUT_LINK, hInstance, 0,
 	)
 	procSendMessageW.Call(githubHwnd, WM_SETFONT, hFont, 1)
@@ -884,7 +883,7 @@ func createAboutControls(hwnd uintptr, hInstance uintptr) {
 		uintptr(unsafe.Pointer(utf16PtrFromString("BUTTON"))),
 		uintptr(unsafe.Pointer(utf16PtrFromString("OK"))),
 		WS_CHILD|WS_VISIBLE|WS_TABSTOP,
-		185, 185, 80, 26,
+		s(185), s(185), s(80), s(26),
 		hwnd, IDC_ABOUT_OK, hInstance, 0,
 	)
 	procSendMessageW.Call(okHwnd, WM_SETFONT, hFont, 1)
@@ -920,12 +919,6 @@ func aboutDlgProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 
 	ret, _, _ := procDefWindowProcW.Call(hwnd, uintptr(msg), wParam, lParam)
 	return ret
-}
-
-type NMHDR struct {
-	HwndFrom uintptr
-	IdFrom   uintptr
-	Code     uint32
 }
 
 func openURL(url string) {
@@ -975,27 +968,6 @@ func onProjectSelected() {
 		return
 	}
 
-	// Check if project is in use
-	if proj.InUse {
-		result := showMessageBox(
-			mainHwnd,
-			fmt.Sprintf("Claude is already running in '%s'.\n\nWhat would you like to do?", proj.Name),
-			"Project In Use",
-			MB_YESNOCANCEL|MB_ICONQUESTION,
-		)
-
-		switch result {
-		case IDYES:
-			// Focus existing - TODO: implement window focusing
-			procDestroyWindow.Call(mainHwnd)
-			return
-		case IDNO:
-			// Open new - continue below
-		case IDCANCEL:
-			return
-		}
-	}
-
 	// Show opening indication
 	procSetWindowTextW.Call(mainHwnd, uintptr(unsafe.Pointer(utf16PtrFromString(fmt.Sprintf("Opening %s...", proj.Name)))))
 	procEnableWindow.Call(editHwnd, 0)
@@ -1022,12 +994,6 @@ func onProjectSelected() {
 }
 
 // Win32 helper functions
-func getSysColor(index int) uint32 {
-	procGetSysColor := user32.NewProc("GetSysColor")
-	ret, _, _ := procGetSysColor.Call(uintptr(index))
-	return uint32(ret)
-}
-
 func setBkColor(hdc syscall.Handle, color uint32) {
 	procSetBkColor := gdi32.NewProc("SetBkColor")
 	procSetBkColor.Call(uintptr(hdc), uintptr(color))
@@ -1056,7 +1022,7 @@ func deleteObject(obj syscall.Handle) {
 func drawText(hdc syscall.Handle, text string, rect *RECT, format uint32) {
 	procDrawTextW := user32.NewProc("DrawTextW")
 	textPtr := utf16PtrFromString(text)
-	procDrawTextW.Call(uintptr(hdc), uintptr(unsafe.Pointer(textPtr)), uintptr(len(text)), uintptr(unsafe.Pointer(rect)), uintptr(format))
+	procDrawTextW.Call(uintptr(hdc), uintptr(unsafe.Pointer(textPtr)), negInt(-1), uintptr(unsafe.Pointer(rect)), uintptr(format))
 }
 
 func showMessageBox(hwnd uintptr, text, caption string, flags uint32) int {

@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Fanis Hatzidakis
+// Licensed under PolyForm Internal Use License 1.0.0 - see LICENCE.md
+
 package projects
 
 import (
@@ -15,7 +18,6 @@ type Project struct {
 	Name       string    // Last component of the path
 	Path       string    // Full path to the project directory
 	LastUsed   time.Time // Last modified time
-	InUse      bool      // Whether Claude is currently running in this project
 	PathExists bool      // Whether the project directory exists on disk
 	EncodedDir string    // The encoded directory name in .claude/projects/
 }

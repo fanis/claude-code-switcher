@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Fanis Hatzidakis
+// Licensed under PolyForm Internal Use License 1.0.0 - see LICENCE.md
+
 package main
 
 import (
@@ -10,7 +13,12 @@ import (
 	"github.com/fanis/claude-code-switcher/internal/projects"
 )
 
-const appVersion = "0.2.0"
+func utf16PtrFromString(s string) uintptr {
+	p, _ := syscall.UTF16PtrFromString(s)
+	return uintptr(unsafe.Pointer(p))
+}
+
+const appVersion = "0.2.1"
 
 func main() {
 	// Win32 GUI operations must all happen on the same OS thread.
@@ -44,8 +52,8 @@ func showError(title, message string) {
 
 	messageBox.Call(
 		0,
-		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(message))),
-		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(title))),
+		utf16PtrFromString(message),
+		utf16PtrFromString(title),
 		MB_OK|MB_ICONERROR,
 	)
 }

@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-03-06
+
+### Fixed
+- Fix command injection vulnerability: reject project paths containing double quotes
+- Fix text rendering bug for non-ASCII project names (drawText byte count vs character count)
+- Replace deprecated `syscall.StringToUTF16Ptr` with safe `UTF16PtrFromString` wrapper
+
+### Changed
+- Debug logging now gated behind `CLAUDE_SWITCHER_DEBUG` env var (was always on)
+- Replace O(n^2) bubble sort with `sort.Slice` in fuzzy matching
+- Remove non-functional "in use" detection (process package still unused)
+- Remove dead code: unused variables, structs, and constants
+
 ## [0.2.0] - 2026-01-30
 
 ### Fixed

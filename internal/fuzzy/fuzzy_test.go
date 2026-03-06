@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Fanis Hatzidakis
+// Licensed under PolyForm Internal Use License 1.0.0 - see LICENCE.md
+
 package fuzzy
 
 import (

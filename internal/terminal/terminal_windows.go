@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Fanis Hatzidakis
+// Licensed under PolyForm Internal Use License 1.0.0 - see LICENCE.md
+
 //go:build windows
 
 package terminal
@@ -7,10 +10,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
-	"time"
 	"unsafe"
 )
+
+func utf16PtrFromString(s string) *uint16 {
+	p, _ := syscall.UTF16PtrFromString(s)
+	return p
+}
 
 // parentHwnd is the owner window for message boxes, set via SetParentHwnd
 var parentHwnd uintptr
@@ -24,6 +32,11 @@ func SetParentHwnd(hwnd uintptr) {
 // and executes 'claude' command
 func OpenInWindowsTerminal(projectPath string) error {
 	logDebug("OpenInWindowsTerminal called for: %s", projectPath)
+
+	// Reject paths containing double quotes to prevent command injection
+	if strings.Contains(projectPath, `"`) {
+		return fmt.Errorf("project path contains invalid character: %s", projectPath)
+	}
 
 	// Check if claude is installed
 	claudePath := findClaude()
@@ -74,9 +87,9 @@ func launchWithWT(wtPath, projectPath, claudePath string) error {
 
 	ret, _, err := shellExecute.Call(
 		0,
-		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr("open"))),
-		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(wtPath))),
-		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(args))),
+		uintptr(unsafe.Pointer(utf16PtrFromString("open"))),
+		uintptr(unsafe.Pointer(utf16PtrFromString(wtPath))),
+		uintptr(unsafe.Pointer(utf16PtrFromString(args))),
 		0,
 		1, // SW_SHOWNORMAL
 	)
@@ -101,9 +114,9 @@ func launchWithCmd(projectPath, claudePath string, wtWasFound bool) error {
 
 	ret, _, err := shellExecute.Call(
 		0,
-		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr("open"))),
-		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(cmdPath))),
-		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(args))),
+		uintptr(unsafe.Pointer(utf16PtrFromString("open"))),
+		uintptr(unsafe.Pointer(utf16PtrFromString(cmdPath))),
+		uintptr(unsafe.Pointer(utf16PtrFromString(args))),
 		0,
 		1, // SW_SHOWNORMAL
 	)
@@ -199,8 +212,8 @@ func showErrorDialog(title, message string) {
 
 	messageBox.Call(
 		parentHwnd,
-		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(message))),
-		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(title))),
+		uintptr(unsafe.Pointer(utf16PtrFromString(message))),
+		uintptr(unsafe.Pointer(utf16PtrFromString(title))),
 		MB_OK|MB_ICONERROR,
 	)
 }
@@ -215,13 +228,17 @@ func showInfoDialog(title, message string) {
 
 	messageBox.Call(
 		parentHwnd,
-		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(message))),
-		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(title))),
+		uintptr(unsafe.Pointer(utf16PtrFromString(message))),
+		uintptr(unsafe.Pointer(utf16PtrFromString(title))),
 		MB_OK|MB_ICONINFORMATION,
 	)
 }
 
 func logDebug(format string, args ...interface{}) {
+	if os.Getenv("CLAUDE_SWITCHER_DEBUG") == "" {
+		return
+	}
+
 	homeDir, _ := os.UserHomeDir()
 	logFile := filepath.Join(homeDir, "claude-switcher-debug.log")
 
@@ -231,9 +248,8 @@ func logDebug(format string, args ...interface{}) {
 	}
 	defer f.Close()
 
-	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	msg := fmt.Sprintf(format, args...)
-	f.WriteString(fmt.Sprintf("[%s] %s\n", timestamp, msg))
+	f.WriteString(fmt.Sprintf("%s\n", msg))
 }
 
 // FocusWindow brings the window with the given HWND to the foreground

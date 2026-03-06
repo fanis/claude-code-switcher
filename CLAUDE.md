@@ -27,7 +27,7 @@ Windows-only native GUI application written in Go. Reads Claude Code project dat
 - `internal/gui/` - Native Win32 GUI via syscall (user32, gdi32, kernel32). Owner-drawn listbox with custom item rendering. Subclasses edit control for keyboard navigation (arrows/Enter/Escape)
 - `internal/fuzzy/` - Fuzzy string matching with scoring (consecutive bonus, word boundary bonus, start-of-text bonus)
 - `internal/terminal/` - Launches Windows Terminal via ShellExecute API. Falls back to cmd.exe if wt.exe not found
-- `internal/process/` - Process enumeration via Toolhelp32 (currently unused)
+- `internal/process/` - Process enumeration via Toolhelp32 (currently unused, kept for future "active project" detection)
 
 ### Key Patterns
 
@@ -85,6 +85,10 @@ See [DEPLOY.md](DEPLOY.md) for full procedure. Summary:
 6. Push commits and tag
 
 Tag format must be `X.Y.Z` (e.g., `0.1.1`) to trigger the release workflow.
+
+## Debug Logging
+
+Set `CLAUDE_SWITCHER_DEBUG=1` environment variable to enable debug logging to `~/claude-switcher-debug.log`.
 
 ## Workflow
 

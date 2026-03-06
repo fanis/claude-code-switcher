@@ -1,6 +1,10 @@
+// Copyright (c) 2025 Fanis Hatzidakis
+// Licensed under PolyForm Internal Use License 1.0.0 - see LICENCE.md
+
 package fuzzy
 
 import (
+	"sort"
 	"strings"
 	"unicode"
 )
@@ -70,13 +74,9 @@ func FilterAndScore(pattern string, items []string) []ScoredItem {
 	}
 
 	// Sort by score (highest first)
-	for i := 0; i < len(results)-1; i++ {
-		for j := i + 1; j < len(results); j++ {
-			if results[j].Score > results[i].Score {
-				results[i], results[j] = results[j], results[i]
-			}
-		}
-	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Score > results[j].Score
+	})
 
 	return results
 }
