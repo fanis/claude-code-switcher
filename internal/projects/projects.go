@@ -83,11 +83,8 @@ func LoadProjects() ([]Project, error) {
 			if projectPath == "" {
 				continue
 			}
-			// Use directory modification time
-			info, err := entry.Info()
-			if err == nil {
-				lastUsed = info.ModTime()
-			}
+			// Use most recent .jsonl file modification time
+			lastUsed = latestJsonlModTime(projectDir)
 		}
 
 		_, statErr := os.Stat(projectPath)
@@ -151,6 +148,29 @@ func loadProjectInfo(filePath string) (string, time.Time, error) {
 // that contains cwd information
 type sessionMessage struct {
 	Cwd string `json:"cwd"`
+}
+
+// latestJsonlModTime returns the most recent modification time among .jsonl
+// files in the given directory. Returns zero time if no .jsonl files are found.
+func latestJsonlModTime(projectDir string) time.Time {
+	entries, err := os.ReadDir(projectDir)
+	if err != nil {
+		return time.Time{}
+	}
+	var latest time.Time
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().After(latest) {
+			latest = info.ModTime()
+		}
+	}
+	return latest
 }
 
 // extractCwdFromSessions reads the first .jsonl file in the project directory

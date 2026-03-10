@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Build executable (hide console window on launch)
-go build -o claude-code-switcher.exe -ldflags="-H windowsgui" .
+go build -o dist/claude-code-switcher.exe -ldflags="-H windowsgui" .
 
 # Run tests
 go test ./...
@@ -36,6 +36,11 @@ Windows-only native GUI application written in Go. Reads Claude Code project dat
 - GUI uses message pump with GetMessageW/TranslateMessage/DispatchMessageW loop
 - `runtime.LockOSThread()` in main - required for Win32 GUI, prevents Go from rescheduling the goroutine to a different OS thread
 - Project paths encoded as `<drive>--<path-segments-with-dashes>` in Claude's data directory
+- Always use `utf16PtrFromString` wrapper for Win32 string args, never `syscall.StringToUTF16Ptr` (deprecated, silently truncates at embedded nulls)
+- `DrawTextW` length param: pass `-1` for null-terminated strings, never `len(text)` (byte count, wrong for non-ASCII)
+- Paths interpolated into ShellExecute args must be validated (reject `"` chars) to prevent command injection
+- `go vet` warns "possible misuse of unsafe.Pointer" on Win32 lParam casts (DRAWITEMSTRUCT, MEASUREITEMSTRUCT) - this is expected and unavoidable
+- No external dependencies (no go.sum) - GitHub Actions cache warning about missing go.sum is harmless
 
 ### Terminal Launching
 
@@ -94,3 +99,4 @@ Set `CLAUDE_SWITCHER_DEBUG=1` environment variable to enable debug logging to `~
 
 - Before committing/pushing, always update docs (CLAUDE.md, CHANGELOG.md, README.md) first
 - Always show the full diff for review before pushing
+- Version lives in three places: `main.go` (appVersion const), `README.md` (badge), `CHANGELOG.md` (new section)

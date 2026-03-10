@@ -96,6 +96,7 @@ const (
 	WM_DRAWITEM       = 0x002B
 	WM_MEASUREITEM    = 0x002C
 	WM_ACTIVATE       = 0x0006
+	WM_GETMINMAXINFO  = 0x0024
 
 	WA_INACTIVE = 0
 
@@ -128,9 +129,10 @@ const (
 	COLOR_HIGHLIGHT  = 13
 	COLOR_HIGHLIGHTTEXT = 14
 
-	DT_LEFT       = 0x0000
-	DT_SINGLELINE = 0x0020
-	DT_VCENTER    = 0x0004
+	DT_LEFT         = 0x0000
+	DT_RIGHT        = 0x0002
+	DT_SINGLELINE   = 0x0020
+	DT_VCENTER      = 0x0004
 	DT_END_ELLIPSIS = 0x8000
 
 	ODT_LISTBOX   = 2
@@ -192,6 +194,14 @@ type MEASUREITEMSTRUCT struct {
 	ItemWidth  uint32
 	ItemHeight uint32
 	ItemData   uintptr
+}
+
+type MINMAXINFO struct {
+	Reserved    POINT
+	MaxSize     POINT
+	MaxPosition POINT
+	MinTrackSize POINT
+	MaxTrackSize POINT
 }
 
 type INITCOMMONCONTROLSEX struct {
@@ -304,6 +314,12 @@ func wndProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 	switch msg {
 	case WM_CREATE:
 		createControls(hwnd)
+		return 0
+
+	case WM_GETMINMAXINFO:
+		mmi := (*MINMAXINFO)(unsafe.Pointer(lParam))
+		mmi.MinTrackSize.X = 400
+		mmi.MinTrackSize.Y = 200
 		return 0
 
 	case WM_SIZE:
@@ -573,6 +589,7 @@ func resizeControls(hwnd uintptr) {
 	procMoveWindow.Call(sortBtnHwnd, uintptr(margin+editWidth+gap), uintptr(margin), uintptr(sortBtnWidth), 30, 1)
 	procMoveWindow.Call(aboutBtnHwnd, uintptr(width-aboutBtnWidth-margin), uintptr(margin), uintptr(aboutBtnWidth), 30, 1)
 	procMoveWindow.Call(listHwnd, uintptr(margin), 50, uintptr(width-margin*2), uintptr(height-60), 1)
+	procInvalidateRect.Call(listHwnd, 0, 1)
 }
 
 func populateList() {
@@ -644,17 +661,21 @@ func drawListItem(dis *DRAWITEMSTRUCT) {
 	}
 	drawText(dis.HDC, nameText, &nameRect, DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
 
-	// Draw path and last used (second line)
+	// Draw last used timestamp (first line, right-aligned)
+	lastUsedStr := formatLastUsed(proj.LastUsed)
+	timeRect := dis.RcItem
+	timeRect.Right -= scale(8)
+	timeRect.Top += scale(4)
+	timeRect.Bottom = timeRect.Top + scale(18)
 	setTextColor(dis.HDC, secondaryColor)
+	drawText(dis.HDC, lastUsedStr, &timeRect, DT_RIGHT|DT_SINGLELINE)
 
+	// Draw path (second line)
 	infoRect := dis.RcItem
 	infoRect.Left += scale(8)
 	infoRect.Top += scale(22)
 	infoRect.Bottom = infoRect.Top + scale(16)
-
-	lastUsedStr := formatLastUsed(proj.LastUsed)
-	infoText := fmt.Sprintf("%s  -  %s", proj.Path, lastUsedStr)
-	drawText(dis.HDC, infoText, &infoRect, DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
+	drawText(dis.HDC, proj.Path, &infoRect, DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
 }
 
 func formatLastUsed(t time.Time) string {
