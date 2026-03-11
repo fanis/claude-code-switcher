@@ -4,6 +4,8 @@ A fast, native Windows utility for switching between Claude Code projects. Shows
 
 > **Latest Version**: 0.2.3 | [See What's New](CHANGELOG.md)
 
+![Project list sorted by recent use](screenshots/project-list.jpg)
+
 ## Features
 
 - Native Win32 GUI for minimal startup time
@@ -41,6 +43,8 @@ The `-ldflags="-H windowsgui"` flag prevents a console window from appearing whe
 3. Use arrow keys to navigate the list
 4. Press Enter to open the selected project in Windows Terminal
 5. Press Escape to close without selecting
+
+![Fuzzy search filtering](screenshots/fuzzy-search.jpg)
 
 ## Keyboard Shortcuts
 
