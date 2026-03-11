@@ -26,8 +26,21 @@ func Match(pattern, text string) (bool, int) {
 
 	for i, char := range text {
 		if patternIdx < len(pattern) && char == rune(pattern[patternIdx]) {
+			// First character must match at a word boundary
+			if patternIdx == 0 && i > 0 && unicode.IsLetter(rune(text[i-1])) {
+				continue
+			}
+
 			patternIdx++
 			score += 10 // Base score for match
+
+			// Penalty for gaps between matches
+			if lastMatchIdx >= 0 {
+				gap := i - lastMatchIdx - 1
+				if gap > 0 {
+					score -= gap * 3
+				}
+			}
 
 			// Bonus for consecutive matches
 			if lastMatchIdx == i-1 {
@@ -53,6 +66,11 @@ func Match(pattern, text string) (bool, int) {
 
 	// All pattern characters must be found
 	if patternIdx < len(pattern) {
+		return false, 0
+	}
+
+	// Reject matches where gap penalties outweigh match quality
+	if score <= 0 {
 		return false, 0
 	}
 

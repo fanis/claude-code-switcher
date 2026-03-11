@@ -120,7 +120,7 @@ func TestFilterAndScore(t *testing.T) {
 		{
 			name:      "multiple matches sorted by score",
 			pattern:   "t",
-			wantCount: 4, // all have 't'
+			wantCount: 2, // only items with 't' at word boundary: trading-newsletter, test-project
 		},
 		{
 			name:      "no matches",

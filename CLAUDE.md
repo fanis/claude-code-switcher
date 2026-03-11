@@ -23,7 +23,7 @@ Windows-only native GUI application written in Go. Reads Claude Code project dat
 ### Package Structure
 
 - `main.go` - Entry point: locks OS thread (`runtime.LockOSThread`), loads projects, runs GUI
-- `internal/projects/` - Reads `~/.claude/projects/*/sessions-index.json`, extracts cwd from session `.jsonl` files, or decodes paths from encoded directory names (e.g., `c--work-project` -> `c:\work\project`). Validates path existence on disk.
+- `internal/projects/` - Reads `~/.claude/projects/*/sessions-index.json`, extracts cwd from session `.jsonl` files, or decodes paths from encoded directory names (e.g., `c--work-project` -> `c:\work\project`). Validates path existence on disk. "Last used" comes from session `modified` field (sessions-index.json) or `.jsonl` file modtime (fallback) - never use directory modtime (unreliable, changed by Claude housekeeping).
 - `internal/gui/` - Native Win32 GUI via syscall (user32, gdi32, kernel32). Owner-drawn listbox with custom item rendering. Subclasses edit control for keyboard navigation (arrows/Enter/Escape)
 - `internal/fuzzy/` - Fuzzy string matching with scoring (consecutive bonus, word boundary bonus, start-of-text bonus)
 - `internal/terminal/` - Launches Windows Terminal via ShellExecute API. Falls back to cmd.exe if wt.exe not found
@@ -72,6 +72,9 @@ Claude's path encoding converts both path separators (`\`) and dots (`.`) to hyp
 - Keyboard shortcuts: arrows to navigate, Enter to open, Escape to close, F1 for About, Ctrl+Backspace to delete word
 - DPI-aware: font sizes and item heights scale with display DPI
 - Custom modal About dialog with version and clickable GitHub link
+- List items: project name + right-aligned timestamp on first line, path on second line
+- Owner-drawn listbox requires `InvalidateRect` after `MoveWindow` on resize (items won't repaint correctly otherwise)
+- Minimum window size (400x200) enforced via `WM_GETMINMAXINFO` handler
 - Projects with missing directories shown as "[NOT FOUND]" with gray styling
 - Shows "Opening [project]..." in title bar with disabled UI while launching
 - Error dialogs are owned by the main window (proper z-order)

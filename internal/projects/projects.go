@@ -83,8 +83,11 @@ func LoadProjects() ([]Project, error) {
 			if projectPath == "" {
 				continue
 			}
-			// Use most recent .jsonl file modification time
-			lastUsed = latestJsonlModTime(projectDir)
+		}
+
+		// Always check .jsonl modtimes - sessions-index.json may be stale
+		if jsonlTime := latestJsonlModTime(projectDir); jsonlTime.After(lastUsed) {
+			lastUsed = jsonlTime
 		}
 
 		_, statErr := os.Stat(projectPath)
