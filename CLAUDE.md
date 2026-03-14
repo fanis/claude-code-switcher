@@ -24,9 +24,11 @@ Windows-only native GUI application written in Go. Reads Claude Code project dat
 
 - `main.go` - Entry point: locks OS thread (`runtime.LockOSThread`), loads projects, runs GUI
 - `internal/projects/` - Reads `~/.claude/projects/*/sessions-index.json`, extracts cwd from session `.jsonl` files, or decodes paths from encoded directory names (e.g., `c--work-project` -> `c:\work\project`). Validates path existence on disk. "Last used" comes from session `modified` field (sessions-index.json) or `.jsonl` file modtime (fallback) - never use directory modtime (unreliable, changed by Claude housekeeping).
-- `internal/gui/` - Native Win32 GUI via syscall (user32, gdi32, kernel32). Owner-drawn listbox with custom item rendering. Subclasses edit control for keyboard navigation (arrows/Enter/Escape)
+- `internal/gui/` - Native Win32 GUI via syscall (user32, gdi32, kernel32, comctl32). Owner-drawn listbox with custom item rendering. Subclasses edit control for keyboard navigation (arrows/Enter/Escape)
 - `internal/fuzzy/` - Fuzzy string matching with scoring (consecutive bonus, word boundary bonus, start-of-text bonus)
-- `internal/terminal/` - Launches Windows Terminal via ShellExecute API. Falls back to cmd.exe if wt.exe not found
+- `internal/terminal/` - Launches Windows Terminal via exec.Command. Falls back to cmd.exe via ShellExecute if wt.exe not found
+- `internal/config/` - JSON config persistence at `~/.claude-code-switcher/config.json` (update check preferences, pending version state)
+- `internal/update/` - Lightweight GitHub Releases API check, semver comparison, notification dedup logic (max once/day, dismissed versions tracked)
 - `internal/process/` - Process enumeration via Toolhelp32 (currently unused, kept for future "active project" detection)
 
 ### Key Patterns
@@ -44,17 +46,22 @@ Windows-only native GUI application written in Go. Reads Claude Code project dat
 
 ### Terminal Launching
 
-Uses ShellExecute API (not exec.Command) to launch terminals. Finds claude's full path since app launchers like Everything/Keypirinha don't inherit the user's PATH.
+Uses exec.Command for Windows Terminal and ShellExecute for cmd.exe fallback. Finds claude's full path since app launchers like Everything/Keypirinha don't inherit the user's PATH. Debug logging writes to `~/claude-switcher-debug.log`.
 
 Claude path search order (checked in this order to avoid PATH lookup delays):
 1. `~/.local/bin/claude.exe` - official installer location
-3. `%APPDATA%/npm/claude.cmd` - npm global install
-4. `~/scoop/shims/claude.exe` - scoop install
-5. `C:/ProgramData/chocolatey/bin/claude.exe` - chocolatey install
+2. `%APPDATA%/npm/claude.cmd` - npm global install
+3. `~/scoop/shims/claude.exe` - scoop install
+4. `C:/ProgramData/chocolatey/bin/claude.exe` - chocolatey install
+5. `exec.LookPath("claude")` - last resort PATH lookup (may be slow with network drives)
 
-Windows Terminal syntax: `wt.exe -d "path" -- "claude.exe"`. The `--` separator is required to prevent wt.exe from misinterpreting the command as options.
+Each location also checks alternative extensions (.exe, .cmd, or extensionless) where applicable.
 
-Fallback: `cmd.exe /k cd /d "path" && "claude.exe"` when wt.exe not found. Shows info dialog suggesting Windows Terminal installation.
+Windows Terminal is found via `%LOCALAPPDATA%/Microsoft/WindowsApps/wt.exe`.
+
+Windows Terminal syntax: `wt.exe -w 0 nt -d "path" -- "claude.exe"`. The `-w 0` reuses the most recent WT window, `nt` opens a new tab, `--` prevents wt.exe from misinterpreting the command as options. Note: tab reuse requires the switcher to run at the same elevation level as the existing WT window.
+
+Fallback: `cmd.exe /k cd /d "path" && "claude.exe"` when wt.exe not found (silent fallback, no dialog).
 
 ### Path Resolution
 
@@ -69,9 +76,11 @@ Claude's path encoding converts both path separators (`\`) and dots (`.`) to hyp
 
 - Closes automatically when losing focus (launcher-style behavior)
 - Sort button toggles between "By: Recent" and "By: Name" (Tab key also toggles)
-- Keyboard shortcuts: arrows to navigate, Enter to open, Escape to close, F1 for About, Ctrl+Backspace to delete word
+- Keyboard shortcuts: arrows to navigate, Enter to open, Escape to close, F1 for Settings, Ctrl+Backspace to delete word
 - DPI-aware: font sizes and item heights scale with display DPI
-- Custom modal About dialog with version and clickable GitHub link
+- Settings dialog (gear icon button): update check toggle (checkbox) + about info, uses `WM_CTLCOLORSTATIC` for white backgrounds
+- One-time onboarding prompt on first launch asking about update notifications (`asked_about_updates` config flag)
+- Two-phase update check: background goroutine writes `pending_version`/`pending_url` to config, next launch shows notification via `WM_APP_UPDATE` custom message
 - List items: project name + right-aligned timestamp on first line, path on second line
 - Owner-drawn listbox requires `InvalidateRect` after `MoveWindow` on resize (items won't repaint correctly otherwise)
 - Minimum window size (400x200) enforced via `WM_GETMINMAXINFO` handler

@@ -11,9 +11,11 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/fanis/claude-code-switcher/internal/config"
 	"github.com/fanis/claude-code-switcher/internal/fuzzy"
 	"github.com/fanis/claude-code-switcher/internal/projects"
 	"github.com/fanis/claude-code-switcher/internal/terminal"
+	"github.com/fanis/claude-code-switcher/internal/update"
 )
 
 var (
@@ -96,7 +98,10 @@ const (
 	WM_DRAWITEM       = 0x002B
 	WM_MEASUREITEM    = 0x002C
 	WM_ACTIVATE       = 0x0006
-	WM_GETMINMAXINFO  = 0x0024
+	WM_GETMINMAXINFO    = 0x0024
+	WM_CTLCOLORSTATIC  = 0x0138
+	WM_APP             = 0x8000
+	WM_APP_UPDATE      = WM_APP + 1
 
 	WA_INACTIVE = 0
 
@@ -123,7 +128,18 @@ const (
 	GWLP_WNDPROC  uintptr = 0xFFFFFFFFFFFFFFFC // -4 as uintptr
 	GWLP_USERDATA uintptr = 0xFFFFFFFFFFFFFFEB // -21 as uintptr
 
+	MB_OK           = 0x00000000
+	MB_YESNO        = 0x00000004
 	MB_ICONERROR    = 0x00000010
+	MB_ICONQUESTION = 0x00000020
+	IDYES           = 6
+
+	BM_GETCHECK      = 0x00F0
+	BM_SETCHECK      = 0x00F1
+	BST_CHECKED      = 1
+	BST_UNCHECKED    = 0
+	BS_AUTOCHECKBOX  = 0x0003
+	SS_ETCHEDHORZ    = 0x0010
 
 	COLOR_WINDOW     = 5
 	COLOR_HIGHLIGHT  = 13
@@ -213,7 +229,7 @@ const (
 	IDC_EDIT    = 101
 	IDC_LISTBOX = 102
 	IDC_SORT    = 103
-	IDC_ABOUT   = 104
+	IDC_SETTINGS = 104
 )
 
 const (
@@ -225,16 +241,20 @@ var (
 	editHwnd         uintptr
 	listHwnd         uintptr
 	sortBtnHwnd      uintptr
-	aboutBtnHwnd     uintptr
+	settingsBtnHwnd  uintptr
 	hFont            uintptr
+	hFontBold        uintptr
+	hFontSmall       uintptr
 	originalEditProc uintptr
 	currentDPI       uint32 = 96 // Default DPI
+	hWhiteBrush      uintptr
 
 	allProjects      []projects.Project
 	filteredProjects []projects.Project
 	sortByName       bool
 	showingDialog    bool // Prevent close on focus loss while showing dialog
 	appVersion       string
+	appConfig        *config.Config
 )
 
 func utf16PtrFromString(s string) *uint16 {
@@ -247,10 +267,11 @@ func negInt(n int) uintptr {
 	return uintptr(int32(n))
 }
 
-func Run(projectList []projects.Project, version string) {
+func Run(projectList []projects.Project, version string, cfg *config.Config) {
 	allProjects = projectList
 	filteredProjects = projectList
 	appVersion = version
+	appConfig = cfg
 
 	// Initialize common controls
 	var icc INITCOMMONCONTROLSEX
@@ -299,6 +320,42 @@ func Run(projectList []projects.Project, version string) {
 	procSetForegroundWindow.Call(hwnd)
 	procSetFocus.Call(editHwnd)
 
+	// One-time onboarding: ask about update notifications
+	if !appConfig.AskedAboutUpdates {
+		appConfig.AskedAboutUpdates = true
+		result := showMessageBox(hwnd,
+			"Would you like to be notified when a new version is available?\n\n"+
+				"You can change this later in Settings.",
+			"Claude Code Switcher",
+			MB_YESNO|MB_ICONQUESTION)
+		if result == IDYES {
+			appConfig.UpdateCheckEnabled = true
+		}
+		config.Save(appConfig)
+	}
+
+	// Show pending update notification from a previous session
+	if appConfig.PendingVersion != "" && update.IsNewer(appVersion, appConfig.PendingVersion) {
+		procPostMessageW.Call(hwnd, WM_APP_UPDATE, 0, 0)
+	}
+
+	// Start background update check for next session
+	if appConfig.UpdateCheckEnabled && appConfig.LastCheckDate != time.Now().Format("2006-01-02") {
+		go func() {
+			latest, url, err := update.CheckLatest()
+			if err != nil || !update.IsNewer(appVersion, latest) {
+				return
+			}
+			if latest == appConfig.DismissedVersion {
+				return
+			}
+			appConfig.PendingVersion = latest
+			appConfig.PendingURL = url
+			appConfig.LastCheckDate = time.Now().Format("2006-01-02")
+			config.Save(appConfig)
+		}()
+	}
+
 	var msg MSG
 	for {
 		ret, _, _ := procGetMessageW.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
@@ -341,10 +398,13 @@ func wndProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 			}
 		case IDC_SORT:
 			toggleSort()
-		case IDC_ABOUT:
-			showingDialog = true
-			showAboutDialog()
+		case IDC_SETTINGS:
+			showSettingsDialog()
 		}
+		return 0
+
+	case WM_APP_UPDATE:
+		showUpdateNotification()
 		return 0
 
 	case WM_DRAWITEM:
@@ -400,6 +460,7 @@ func createControls(hwnd uintptr) {
 	// Create font with proper quality settings
 	const (
 		FW_NORMAL           = 400
+		FW_BOLD             = 700
 		DEFAULT_CHARSET     = 1
 		OUT_DEFAULT_PRECIS  = 0
 		CLIP_DEFAULT_PRECIS = 0
@@ -407,22 +468,23 @@ func createControls(hwnd uintptr) {
 		DEFAULT_PITCH       = 0
 		FF_DONTCARE         = 0
 	)
-	hFont, _, _ = procCreateFontW.Call(
-		negInt(-scaledFontSize),     // Height (negative for character height)
-		0,                           // Width (0 = default aspect ratio)
-		0,                           // Escapement
-		0,                           // Orientation
-		FW_NORMAL,                   // Weight
-		0,                           // Italic
-		0,                           // Underline
-		0,                           // StrikeOut
-		DEFAULT_CHARSET,             // CharSet
-		OUT_DEFAULT_PRECIS,          // OutputPrecision
-		CLIP_DEFAULT_PRECIS,         // ClipPrecision
-		CLEARTYPE_QUALITY,           // Quality - ClearType for smooth fonts
-		DEFAULT_PITCH|FF_DONTCARE,   // PitchAndFamily
-		uintptr(unsafe.Pointer(utf16PtrFromString("Segoe UI"))),
-	)
+	makeFont := func(size int, weight uintptr) uintptr {
+		f, _, _ := procCreateFontW.Call(
+			negInt(-size),
+			0, 0, 0, weight, 0, 0, 0,
+			DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+			CLEARTYPE_QUALITY, DEFAULT_PITCH|FF_DONTCARE,
+			uintptr(unsafe.Pointer(utf16PtrFromString("Segoe UI"))),
+		)
+		return f
+	}
+
+	hFont = makeFont(scaledFontSize, FW_NORMAL)
+	hFontBold = makeFont(scaledFontSize, FW_BOLD)
+	hFontSmall = makeFont((12*int(dpi))/96, FW_NORMAL)
+
+	// White brush for dialog backgrounds
+	hWhiteBrush = uintptr(createSolidBrush(0x00FFFFFF))
 
 	// Search edit box
 	editHwnd, _, _ = procCreateWindowExW.Call(
@@ -449,16 +511,16 @@ func createControls(hwnd uintptr) {
 	)
 	procSendMessageW.Call(sortBtnHwnd, WM_SETFONT, hFont, 1)
 
-	// About button (small "?" button)
-	aboutBtnHwnd, _, _ = procCreateWindowExW.Call(
+	// Settings button (gear icon)
+	settingsBtnHwnd, _, _ = procCreateWindowExW.Call(
 		0,
 		uintptr(unsafe.Pointer(utf16PtrFromString("BUTTON"))),
-		uintptr(unsafe.Pointer(utf16PtrFromString("?"))),
+		uintptr(unsafe.Pointer(utf16PtrFromString("\u2699"))),
 		WS_CHILD|WS_VISIBLE|WS_TABSTOP,
-		592, 10, 26, 30,
-		hwnd, IDC_ABOUT, hInstance, 0,
+		592, 10, 30, 30,
+		hwnd, IDC_SETTINGS, hInstance, 0,
 	)
-	procSendMessageW.Call(aboutBtnHwnd, WM_SETFONT, hFont, 1)
+	procSendMessageW.Call(settingsBtnHwnd, WM_SETFONT, hFont, 1)
 
 	// Project listbox (owner-draw for custom rendering)
 	listHwnd, _, _ = procCreateWindowExW.Call(
@@ -514,7 +576,7 @@ func editSubclassProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr 
 			procDestroyWindow.Call(mainHwnd)
 			return 0
 		case VK_F1:
-			showAboutDialog()
+			showSettingsDialog()
 			return 0
 		}
 	}
@@ -578,16 +640,16 @@ func resizeControls(hwnd uintptr) {
 	height := rect.Bottom - rect.Top
 
 	sortBtnWidth := int32(90)
-	aboutBtnWidth := int32(26)
+	settingsBtnWidth := int32(30)
 	margin := int32(10)
 	gap := int32(6)
 
-	totalBtnWidth := sortBtnWidth + gap + aboutBtnWidth
+	totalBtnWidth := sortBtnWidth + gap + settingsBtnWidth
 	editWidth := width - totalBtnWidth - margin*2 - gap
 
 	procMoveWindow.Call(editHwnd, uintptr(margin), uintptr(margin), uintptr(editWidth), 30, 1)
 	procMoveWindow.Call(sortBtnHwnd, uintptr(margin+editWidth+gap), uintptr(margin), uintptr(sortBtnWidth), 30, 1)
-	procMoveWindow.Call(aboutBtnHwnd, uintptr(width-aboutBtnWidth-margin), uintptr(margin), uintptr(aboutBtnWidth), 30, 1)
+	procMoveWindow.Call(settingsBtnHwnd, uintptr(width-settingsBtnWidth-margin), uintptr(margin), uintptr(settingsBtnWidth), 30, 1)
 	procMoveWindow.Call(listHwnd, uintptr(margin), 50, uintptr(width-margin*2), uintptr(height-60), 1)
 	procInvalidateRect.Call(listHwnd, 0, 1)
 }
@@ -741,24 +803,20 @@ func onSearchChanged() {
 	populateList()
 }
 
-var (
-	aboutDlgHwnd uintptr
-	aboutLinkHwnd uintptr
-)
+var settingsDlgHwnd uintptr
 
 const (
-	WS_POPUP      = 0x80000000
-	WS_CAPTION    = 0x00C00000
-	WS_SYSMENU    = 0x00080000
-	DS_MODALFRAME = 0x80
-	DS_CENTER     = 0x0800
-	SS_CENTER     = 0x0001
+	WS_POPUP   = 0x80000000
+	WS_CAPTION = 0x00C00000
+	WS_SYSMENU = 0x00080000
+	SS_CENTER  = 0x0001
 
-	IDC_ABOUT_LINK = 201
-	IDC_ABOUT_OK   = 202
+	IDC_SETTINGS_CHECK  = 201
+	IDC_SETTINGS_GITHUB = 202
+	IDC_SETTINGS_OK     = 203
 )
 
-func showAboutDialog() {
+func showSettingsDialog() {
 	showingDialog = true
 	defer func() {
 		showingDialog = false
@@ -767,23 +825,19 @@ func showAboutDialog() {
 
 	hInstance, _, _ := procGetModuleHandleW.Call(0)
 
-	// Register dialog class
-	className := utf16PtrFromString("ClaudeAboutDialog")
-
+	className := utf16PtrFromString("ClaudeSettingsDialog")
 	wc := WNDCLASSEXW{
 		Size:       uint32(unsafe.Sizeof(WNDCLASSEXW{})),
-		WndProc:    syscall.NewCallback(aboutDlgProc),
+		WndProc:    syscall.NewCallback(settingsDlgProc),
 		Instance:   syscall.Handle(hInstance),
 		ClassName:  className,
 		Background: syscall.Handle(COLOR_WINDOW + 1),
 	}
 	procRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))
 
-	// Get main window position for centering
+	// Center on main window
 	var mainRect RECT
 	procGetClientRect.Call(mainHwnd, uintptr(unsafe.Pointer(&mainRect)))
-
-	// Get screen position of main window
 	var pt POINT
 	pt.X = mainRect.Left
 	pt.Y = mainRect.Top
@@ -793,58 +847,107 @@ func showAboutDialog() {
 	dpiScale := func(base int) int {
 		return (base * int(currentDPI)) / 96
 	}
-	dlgWidth := dpiScale(300)
-	dlgHeight := dpiScale(260)
+	dlgWidth := dpiScale(310)
+	dlgHeight := dpiScale(280)
 	dlgX := int(pt.X) + (int(mainRect.Right-mainRect.Left)-dlgWidth)/2
 	dlgY := int(pt.Y) + (int(mainRect.Bottom-mainRect.Top)-dlgHeight)/2
 
-	// Disable main window for modal behavior
 	procEnableWindow.Call(mainHwnd, 0)
 
-	// Create dialog window
-	aboutDlgHwnd, _, _ = procCreateWindowExW.Call(
+	settingsDlgHwnd, _, _ = procCreateWindowExW.Call(
 		0,
 		uintptr(unsafe.Pointer(className)),
-		uintptr(unsafe.Pointer(utf16PtrFromString("About"))),
+		uintptr(unsafe.Pointer(utf16PtrFromString("Settings"))),
 		WS_POPUP|WS_CAPTION|WS_SYSMENU,
 		uintptr(dlgX), uintptr(dlgY),
 		uintptr(dlgWidth), uintptr(dlgHeight),
 		mainHwnd, 0, hInstance, 0,
 	)
 
-	// Create controls
-	createAboutControls(aboutDlgHwnd, hInstance)
+	createSettingsControls(settingsDlgHwnd, hInstance)
 
-	procShowWindow.Call(aboutDlgHwnd, SW_SHOW)
-	procUpdateWindow.Call(aboutDlgHwnd)
+	procShowWindow.Call(settingsDlgHwnd, SW_SHOW)
+	procUpdateWindow.Call(settingsDlgHwnd)
 
 	// Modal message loop
 	var msg MSG
 	for {
 		ret, _, _ := procGetMessageW.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
-		if ret == 0 || aboutDlgHwnd == 0 {
+		if ret == 0 || settingsDlgHwnd == 0 {
 			break
 		}
-		// Handle ESC key to close dialog
 		if msg.Message == WM_KEYDOWN && msg.WParam == VK_ESCAPE {
-			procDestroyWindow.Call(aboutDlgHwnd)
-			aboutDlgHwnd = 0
+			procDestroyWindow.Call(settingsDlgHwnd)
+			settingsDlgHwnd = 0
 			break
 		}
 		procTranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
 		procDispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))
 	}
 
-	// Re-enable main window
 	procEnableWindow.Call(mainHwnd, 1)
 }
 
-func createAboutControls(hwnd uintptr, hInstance uintptr) {
-	s := func(base int) uintptr {
+func createSettingsControls(hwnd uintptr, hInstance uintptr) {
+	su := func(base int) uintptr {
 		return uintptr((base * int(currentDPI)) / 96)
 	}
 
-	// Title
+	// --- Updates section ---
+	updatesLabel, _, _ := procCreateWindowExW.Call(
+		0,
+		uintptr(unsafe.Pointer(utf16PtrFromString("STATIC"))),
+		uintptr(unsafe.Pointer(utf16PtrFromString("Updates"))),
+		WS_CHILD|WS_VISIBLE,
+		su(15), su(12), su(270), su(18),
+		hwnd, 0, hInstance, 0,
+	)
+	procSendMessageW.Call(updatesLabel, WM_SETFONT, hFontBold, 1)
+
+	checkHwnd, _, _ := procCreateWindowExW.Call(
+		0,
+		uintptr(unsafe.Pointer(utf16PtrFromString("BUTTON"))),
+		uintptr(unsafe.Pointer(utf16PtrFromString("Check for new versions on startup"))),
+		WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_AUTOCHECKBOX,
+		su(15), su(34), su(270), su(20),
+		hwnd, IDC_SETTINGS_CHECK, hInstance, 0,
+	)
+	procSendMessageW.Call(checkHwnd, WM_SETFONT, hFont, 1)
+	if appConfig.UpdateCheckEnabled {
+		procSendMessageW.Call(checkHwnd, BM_SETCHECK, BST_CHECKED, 0)
+	}
+
+	descHwnd, _, _ := procCreateWindowExW.Call(
+		0,
+		uintptr(unsafe.Pointer(utf16PtrFromString("STATIC"))),
+		uintptr(unsafe.Pointer(utf16PtrFromString("When a new version is found, you will be\nnotified once on the next launch."))),
+		WS_CHILD|WS_VISIBLE,
+		su(32), su(56), su(260), su(32),
+		hwnd, 0, hInstance, 0,
+	)
+	procSendMessageW.Call(descHwnd, WM_SETFONT, hFontSmall, 1)
+
+	// --- Separator ---
+	procCreateWindowExW.Call(
+		0,
+		uintptr(unsafe.Pointer(utf16PtrFromString("STATIC"))),
+		0,
+		WS_CHILD|WS_VISIBLE|SS_ETCHEDHORZ,
+		su(15), su(96), su(270), su(2),
+		hwnd, 0, hInstance, 0,
+	)
+
+	// --- About section ---
+	aboutLabel, _, _ := procCreateWindowExW.Call(
+		0,
+		uintptr(unsafe.Pointer(utf16PtrFromString("STATIC"))),
+		uintptr(unsafe.Pointer(utf16PtrFromString("About"))),
+		WS_CHILD|WS_VISIBLE,
+		su(15), su(106), su(270), su(18),
+		hwnd, 0, hInstance, 0,
+	)
+	procSendMessageW.Call(aboutLabel, WM_SETFONT, hFontBold, 1)
+
 	titleText := "Claude Code Switcher"
 	if appVersion != "" {
 		titleText += " v" + appVersion
@@ -854,92 +957,120 @@ func createAboutControls(hwnd uintptr, hInstance uintptr) {
 		uintptr(unsafe.Pointer(utf16PtrFromString("STATIC"))),
 		uintptr(unsafe.Pointer(utf16PtrFromString(titleText))),
 		WS_CHILD|WS_VISIBLE|SS_CENTER,
-		s(10), s(10), s(280), s(20),
+		su(15), su(128), su(270), su(18),
 		hwnd, 0, hInstance, 0,
 	)
 	procSendMessageW.Call(titleHwnd, WM_SETFONT, hFont, 1)
 
-	// Author
 	authorHwnd, _, _ := procCreateWindowExW.Call(
 		0,
 		uintptr(unsafe.Pointer(utf16PtrFromString("STATIC"))),
 		uintptr(unsafe.Pointer(utf16PtrFromString("by Fanis Hatzidakis"))),
 		WS_CHILD|WS_VISIBLE|SS_CENTER,
-		s(10), s(32), s(280), s(18),
+		su(15), su(146), su(270), su(16),
 		hwnd, 0, hInstance, 0,
 	)
-	procSendMessageW.Call(authorHwnd, WM_SETFONT, hFont, 1)
+	procSendMessageW.Call(authorHwnd, WM_SETFONT, hFontSmall, 1)
 
-	// Shortcuts
-	shortcutsText := "Keyboard shortcuts:\n" +
-		"  Tab - Toggle sort\n" +
-		"  Arrows - Navigate\n" +
-		"  Enter - Open project\n" +
-		"  Escape - Close\n" +
-		"  F1 - About"
-	shortcutsHwnd, _, _ := procCreateWindowExW.Call(
-		0,
-		uintptr(unsafe.Pointer(utf16PtrFromString("STATIC"))),
-		uintptr(unsafe.Pointer(utf16PtrFromString(shortcutsText))),
-		WS_CHILD|WS_VISIBLE,
-		s(15), s(58), s(270), s(100),
-		hwnd, 0, hInstance, 0,
-	)
-	procSendMessageW.Call(shortcutsHwnd, WM_SETFONT, hFont, 1)
-
-	// GitHub button (more reliable than SysLink)
+	// --- Bottom buttons ---
 	githubHwnd, _, _ := procCreateWindowExW.Call(
 		0,
 		uintptr(unsafe.Pointer(utf16PtrFromString("BUTTON"))),
 		uintptr(unsafe.Pointer(utf16PtrFromString("Open GitHub"))),
 		WS_CHILD|WS_VISIBLE|WS_TABSTOP,
-		s(15), s(185), s(100), s(26),
-		hwnd, IDC_ABOUT_LINK, hInstance, 0,
+		su(15), su(195), su(100), su(26),
+		hwnd, IDC_SETTINGS_GITHUB, hInstance, 0,
 	)
 	procSendMessageW.Call(githubHwnd, WM_SETFONT, hFont, 1)
 
-	// OK button
 	okHwnd, _, _ := procCreateWindowExW.Call(
 		0,
 		uintptr(unsafe.Pointer(utf16PtrFromString("BUTTON"))),
 		uintptr(unsafe.Pointer(utf16PtrFromString("OK"))),
 		WS_CHILD|WS_VISIBLE|WS_TABSTOP,
-		s(185), s(185), s(80), s(26),
-		hwnd, IDC_ABOUT_OK, hInstance, 0,
+		su(200), su(195), su(80), su(26),
+		hwnd, IDC_SETTINGS_OK, hInstance, 0,
 	)
 	procSendMessageW.Call(okHwnd, WM_SETFONT, hFont, 1)
 }
 
-func aboutDlgProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
+func settingsDlgProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 	switch msg {
 	case WM_KEYDOWN:
 		if wParam == VK_ESCAPE {
 			procDestroyWindow.Call(hwnd)
-			aboutDlgHwnd = 0
+			settingsDlgHwnd = 0
 			return 0
 		}
 	case WM_COMMAND:
 		wmId := wParam & 0xFFFF
-		if wmId == IDC_ABOUT_OK {
+		wmEvent := (wParam >> 16) & 0xFFFF
+		switch wmId {
+		case IDC_SETTINGS_OK:
 			procDestroyWindow.Call(hwnd)
-			aboutDlgHwnd = 0
+			settingsDlgHwnd = 0
 			return 0
-		}
-		if wmId == IDC_ABOUT_LINK {
+		case IDC_SETTINGS_GITHUB:
 			openURL("https://github.com/fanis/claude-code-switcher")
 			return 0
+		case IDC_SETTINGS_CHECK:
+			if wmEvent == 0 { // BN_CLICKED
+				checked, _, _ := procSendMessageW.Call(
+					getDlgItem(hwnd, IDC_SETTINGS_CHECK), BM_GETCHECK, 0, 0)
+				appConfig.UpdateCheckEnabled = checked == BST_CHECKED
+				config.Save(appConfig)
+			}
+			return 0
 		}
+	case WM_CTLCOLORSTATIC:
+		return hWhiteBrush
 	case WM_CLOSE:
 		procDestroyWindow.Call(hwnd)
-		aboutDlgHwnd = 0
+		settingsDlgHwnd = 0
 		return 0
 	case WM_DESTROY:
-		aboutDlgHwnd = 0
+		settingsDlgHwnd = 0
 		return 0
 	}
 
 	ret, _, _ := procDefWindowProcW.Call(hwnd, uintptr(msg), wParam, lParam)
 	return ret
+}
+
+func getDlgItem(hwnd uintptr, id uintptr) uintptr {
+	ret, _, _ := procGetDlgItem.Call(hwnd, id)
+	return ret
+}
+
+func showUpdateNotification() {
+	version := appConfig.PendingVersion
+	url := appConfig.PendingURL
+
+	// Clear pending so we don't show again
+	appConfig.PendingVersion = ""
+	appConfig.PendingURL = ""
+	config.Save(appConfig)
+
+	result := showMessageBox(mainHwnd,
+		fmt.Sprintf("Version %s is available.\n\nOpen the download page?", version),
+		"Update Available",
+		MB_YESNO|MB_ICONQUESTION)
+
+	if result == IDYES {
+		// Keep showingDialog true while opening browser to prevent
+		// the main window from closing on focus loss. Reset after a delay
+		// since ShellExecute returns before the browser steals focus.
+		showingDialog = true
+		openURL(url)
+		go func() {
+			time.Sleep(2 * time.Second)
+			showingDialog = false
+		}()
+	} else {
+		// User dismissed - don't notify again for this version
+		appConfig.DismissedVersion = version
+		config.Save(appConfig)
+	}
 }
 
 func openURL(url string) {

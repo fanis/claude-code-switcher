@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-03-14
+
+### Added
+- Settings dialog (gear icon button, F1) replaces About dialog
+- Optional update notifications via GitHub Releases (opt-in, checked once per day)
+- Two-phase update check: background check on current launch, notification on next launch
+- First-launch onboarding prompt asking about update notifications
+- Config file at `~/.claude-code-switcher/config.json`
+
+### Changed
+- Windows Terminal opens new tab in existing window instead of a new window (`-w 0 nt`)
+- Use `exec.Command` instead of `ShellExecute` for Windows Terminal launch
+- Remove info dialog when Windows Terminal is not installed (silent fallback to cmd.exe)
+
 ## [0.2.3] - 2026-03-11
 
 ### Fixed

@@ -2,7 +2,7 @@
 
 A fast, native Windows utility for switching between Claude Code projects. Shows all your Claude Code projects in a popup dialog sorted by most recently used, with fuzzy search filtering.
 
-> **Latest Version**: 0.2.3 | [See What's New](CHANGELOG.md)
+> **Latest Version**: 0.3.0 | [See What's New](CHANGELOG.md)
 
 ![Project list sorted by recent use](screenshots/project-list.jpg)
 
@@ -15,6 +15,7 @@ A fast, native Windows utility for switching between Claude Code projects. Shows
 - Keyboard-driven: fully usable without mouse
 - Launcher-style behavior: closes automatically when losing focus
 - DPI-aware: scales properly on high-DPI displays
+- Optional update notifications via GitHub Releases
 
 ## Requirements
 
@@ -53,7 +54,7 @@ The `-ldflags="-H windowsgui"` flag prevents a console window from appearing whe
 - `Escape`: Close the switcher
 - `Tab`: Toggle sort between recent/name
 - `Ctrl+Backspace`: Delete word in search
-- `F1`: About dialog
+- `F1`: Settings
 
 ## Integration with Hotkeys
 
@@ -61,6 +62,17 @@ For quick access, bind the executable to a global hotkey using:
 
 - **AutoHotkey**: Create a script with `^!c::Run "path\to\claude-code-switcher.exe"`
 - **PowerToys Keyboard Manager**: Map a shortcut to launch the exe
+
+## Update Notifications
+
+On first launch, you'll be asked whether you'd like to receive update notifications. If enabled, the app checks GitHub Releases for new versions in the background. When a new version is found, you'll be notified once on the next launch with an option to open the download page.
+
+- Checks happen at most once per day
+- Dismissed versions won't be shown again
+- Toggle anytime in Settings (gear icon or F1)
+- No auto-download or auto-install - you choose when to update
+
+Settings are stored in `~/.claude-code-switcher/config.json`.
 
 ## How It Works
 

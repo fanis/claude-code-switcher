@@ -67,37 +67,24 @@ func OpenInWindowsTerminal(projectPath string) error {
 		logDebug("Windows Terminal failed: %v, falling back to cmd.exe", err)
 	} else {
 		logDebug("Windows Terminal not found, using cmd.exe")
-		showInfoDialog("Windows Terminal Not Found",
-			"Windows Terminal is not installed. Using cmd.exe instead.\n\n"+
-				"For a better experience, install Windows Terminal from the Microsoft Store.")
 	}
 
 	return launchWithCmd(projectPath, claudePath, wtFound)
 }
 
-// launchWithWT launches Windows Terminal directly
+// launchWithWT launches Windows Terminal directly using exec.Command
+// (ShellExecute on the WindowsApps alias doesn't respect -w 0 for tab reuse)
 func launchWithWT(wtPath, projectPath, claudePath string) error {
-	shell32 := syscall.NewLazyDLL("shell32.dll")
-	shellExecute := shell32.NewProc("ShellExecuteW")
+	// -w 0: reuse the most recent WT window instead of opening a new one
+	// nt: explicitly open a new tab
+	// --: separator to prevent wt from misinterpreting the command as options
+	cmd := exec.Command(wtPath, "-w", "0", "nt", "-d", projectPath, "--", claudePath)
+	logDebug("exec.Command: %s %v", wtPath, cmd.Args[1:])
 
-	// Use -- separator to clearly separate wt options from the command
-	args := `-d "` + projectPath + `" -- "` + claudePath + `"`
-
-	logDebug("ShellExecute (wt direct): %s %s", wtPath, args)
-
-	ret, _, err := shellExecute.Call(
-		0,
-		uintptr(unsafe.Pointer(utf16PtrFromString("open"))),
-		uintptr(unsafe.Pointer(utf16PtrFromString(wtPath))),
-		uintptr(unsafe.Pointer(utf16PtrFromString(args))),
-		0,
-		1, // SW_SHOWNORMAL
-	)
-
-	logDebug("ShellExecute returned: %d, err: %v", ret, err)
-
-	if ret <= 32 {
-		return fmt.Errorf("ShellExecute failed with code %d", ret)
+	err := cmd.Start()
+	if err != nil {
+		logDebug("exec.Command failed: %v", err)
+		return err
 	}
 	return nil
 }

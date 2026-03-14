@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"unsafe"
 
+	"github.com/fanis/claude-code-switcher/internal/config"
 	"github.com/fanis/claude-code-switcher/internal/gui"
 	"github.com/fanis/claude-code-switcher/internal/projects"
 )
@@ -18,7 +19,7 @@ func utf16PtrFromString(s string) uintptr {
 	return uintptr(unsafe.Pointer(p))
 }
 
-const appVersion = "0.2.3"
+const appVersion = "0.3.0"
 
 func main() {
 	// Win32 GUI operations must all happen on the same OS thread.
@@ -39,8 +40,11 @@ func main() {
 		return
 	}
 
+	// Load config (non-fatal if missing)
+	cfg, _ := config.Load()
+
 	// Run the GUI
-	gui.Run(projectList, appVersion)
+	gui.Run(projectList, appVersion, cfg)
 }
 
 func showError(title, message string) {
