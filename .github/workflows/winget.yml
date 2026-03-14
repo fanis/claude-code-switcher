@@ -1,0 +1,15 @@
+name: Publish to WinGet
+
+on:
+  release:
+    types: [released]
+
+jobs:
+  winget:
+    runs-on: windows-latest
+    steps:
+      - uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: Fanis.ClaudeCodeSwitcher
+          installers-regex: 'claude-code-switcher\.exe$'
+          token: ${{ secrets.WINGET_TOKEN }}

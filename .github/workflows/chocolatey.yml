@@ -1,0 +1,41 @@
+name: Publish to Chocolatey
+
+on:
+  release:
+    types: [released]
+
+jobs:
+  chocolatey:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download release asset
+        shell: bash
+        run: |
+          mkdir -p tools
+          gh release download "${{ github.event.release.tag_name }}" --pattern "claude-code-switcher.exe" --dir tools
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Generate install script
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash tools/claude-code-switcher.exe -Algorithm SHA256).Hash
+          $version = "${{ github.event.release.tag_name }}"
+          $script = @"
+          `$ErrorActionPreference = 'Stop'
+          `$toolsDir = "`$(Split-Path -Parent `$MyInvocation.MyCommand.Definition)"
+          Get-ChocolateyWebFile -PackageName `$env:ChocolateyPackageName ``
+            -FileFullPath "`$toolsDir\claude-code-switcher.exe" ``
+            -Url "https://github.com/fanis/claude-code-switcher/releases/download/$version/claude-code-switcher.exe" ``
+            -Checksum '$hash' ``
+            -ChecksumType 'sha256'
+          "@
+          Set-Content -Path tools/chocolateyInstall.ps1 -Value $script
+
+      - name: Pack and push
+        shell: pwsh
+        run: |
+          choco pack claude-code-switcher.portable.nuspec --version "${{ github.event.release.tag_name }}"
+          choco push (Get-Item claude-code-switcher.portable.*.nupkg).FullName --source https://push.chocolatey.org/ -k ${{ secrets.CHOCO_API_KEY }}

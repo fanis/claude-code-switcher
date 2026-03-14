@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>claude-code-switcher.portable</id>
+    <version>0.0.0</version>
+    <title>Claude Code Switcher (Portable)</title>
+    <authors>Fanis Hatzidakis</authors>
+    <owners>fanis</owners>
+    <projectUrl>https://github.com/fanis/claude-code-switcher</projectUrl>
+    <licenseUrl>https://github.com/fanis/claude-code-switcher/blob/master/LICENCE.md</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <projectSourceUrl>https://github.com/fanis/claude-code-switcher</projectSourceUrl>
+    <bugTrackerUrl>https://github.com/fanis/claude-code-switcher/issues</bugTrackerUrl>
+    <releaseNotes>https://github.com/fanis/claude-code-switcher/blob/master/CHANGELOG.md</releaseNotes>
+    <tags>claude claude-code developer-tools windows-terminal portable</tags>
+    <summary>Fast native Windows utility for switching between Claude Code projects.</summary>
+    <description>A fast, native Windows utility for switching between Claude Code projects. Shows all your Claude Code projects in a popup dialog sorted by most recently used, with fuzzy search filtering.
+
+## Features
+
+- Native Win32 GUI for minimal startup time
+- Fuzzy search to filter projects as you type
+- Sort by recent use or alphabetically by name
+- Opens selected project in Windows Terminal (falls back to cmd.exe)
+- Keyboard-driven: fully usable without mouse
+- Launcher-style behavior: closes automatically when losing focus
+- DPI-aware: scales properly on high-DPI displays
+- Optional update notifications via GitHub Releases
+    </description>
+  </metadata>
+</package>
