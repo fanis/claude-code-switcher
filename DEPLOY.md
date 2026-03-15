@@ -73,17 +73,24 @@ The GitHub Actions release workflow triggers on tags matching `[0-9]+.[0-9]+.[0-
 
 When you push a correctly formatted tag, GitHub Actions will:
 
-1. Check out the code
-2. Build the Windows executable
-3. Extract the changelog for this version
-4. Create a GitHub Release with:
-   - Release name: `vX.Y.Z`
-   - Release notes from CHANGELOG.md
-   - Attached binary: `claude-code-switcher.exe`
+1. **Release workflow** (`release.yml`): builds the exe, extracts changelog, creates a GitHub Release with the binary attached
+2. **Winget workflow** (`winget.yml`): submits an updated manifest PR to microsoft/winget-pkgs (requires `WINGET_TOKEN` repo secret - a GitHub PAT with `public_repo` scope)
+3. **Chocolatey workflow** (`chocolatey.yml`): packs and pushes the updated package to chocolatey.org (requires `CHOCO_API_KEY` repo secret)
+
+Scoop (ScoopInstaller/Extras) has `checkver`/`autoupdate` in the manifest, so Scoop maintainers handle updates via their own automation.
 
 ## Verifying the Release
 
 After pushing the tag:
 
 1. Check the Actions tab: https://github.com/fanis/claude-code-switcher/actions
-2. Verify the release was created: https://github.com/fanis/claude-code-switcher/releases
+2. Verify the GitHub Release: https://github.com/fanis/claude-code-switcher/releases
+3. Check winget PR: https://github.com/microsoft/winget-pkgs/pulls?q=ClaudeCodeSwitcher
+4. Check Chocolatey: https://community.chocolatey.org/packages/claude-code-switcher.portable
+
+## Repo Secrets
+
+| Secret | Source | Purpose |
+|---|---|---|
+| `WINGET_TOKEN` | [GitHub PAT](https://github.com/settings/tokens/new) with `public_repo` scope | winget-releaser action pushes manifest PRs to microsoft/winget-pkgs |
+| `CHOCO_API_KEY` | [Chocolatey account](https://community.chocolatey.org/account) API key | choco push to chocolatey.org |

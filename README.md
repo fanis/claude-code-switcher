@@ -17,10 +17,23 @@ A fast, native Windows utility for switching between Claude Code projects. Shows
 - DPI-aware: scales properly on high-DPI displays
 - Optional update notifications via GitHub Releases
 
+## Installation
+
+### Package managers
+
+```bash
+winget install claude-code-switcher
+scoop install claude-code-switcher
+choco install claude-code-switcher.portable
+```
+
+### Manual download
+
+Download `claude-code-switcher.exe` from the [latest release](https://github.com/fanis/claude-code-switcher/releases/latest) and place it anywhere on your system.
+
 ## Requirements
 
 - Windows 10/11
-- Go 1.21 or later (for building)
 - Claude Code installed and used at least once
 - Windows Terminal recommended (optional, falls back to cmd.exe)
 
