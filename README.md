@@ -19,12 +19,11 @@ A fast, native Windows utility for switching between Claude Code projects. Shows
 
 ## Installation
 
-### Package managers
+### Scoop
 
 ```bash
-winget install claude-code-switcher
+scoop bucket add fanis https://github.com/fanis/scoop-apps
 scoop install claude-code-switcher
-choco install claude-code-switcher.portable
 ```
 
 ### Manual download
