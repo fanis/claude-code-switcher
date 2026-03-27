@@ -19,6 +19,12 @@ A fast, native Windows utility for switching between Claude Code projects. Shows
 
 ## Installation
 
+### Winget
+
+```bash
+winget install Fanis.ClaudeCodeSwitcher
+```
+
 ### Scoop
 
 ```bash
