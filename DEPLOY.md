@@ -74,19 +74,23 @@ The GitHub Actions release workflow triggers on tags matching `[0-9]+.[0-9]+.[0-
 When you push a correctly formatted tag, GitHub Actions will:
 
 1. **Release workflow** (`release.yml`): builds the exe, extracts changelog, creates a GitHub Release with the binary attached
-2. **Winget workflow** (`winget.yml`): submits an updated manifest PR to microsoft/winget-pkgs (requires `WINGET_TOKEN` repo secret - a GitHub PAT with `public_repo` scope)
-3. **Chocolatey workflow** (`chocolatey.yml`): packs and pushes the updated package to chocolatey.org (requires `CHOCO_API_KEY` repo secret)
+2. **Publish to WinGet** (`winget.yml`): runs from `release.yml` via `workflow_call` and submits an updated manifest PR to `microsoft/winget-pkgs` (requires `WINGET_TOKEN`)
+3. **Publish to Scoop** (`scoop.yml`): runs from `release.yml` via `workflow_call` and updates `fanis/scoop-apps` `bucket/claude-code-switcher.json`
+4. **Publish to Chocolatey** (`chocolatey.yml`): manual `workflow_dispatch` only, used when you explicitly want to publish an already-released version to chocolatey.org (requires `CHOCO_API_KEY`)
 
-Scoop (ScoopInstaller/Extras) has `checkver`/`autoupdate` in the manifest, so Scoop maintainers handle updates via their own automation.
+The package publishing workflows support `workflow_dispatch`, so a specific released version can be republished manually if needed without creating a new tag. Chocolatey is intentionally manual-only.
 
 ## Verifying the Release
 
 After pushing the tag:
 
-1. Check the Actions tab: https://github.com/fanis/claude-code-switcher/actions
+1. Check the `Release` workflow run: https://github.com/fanis/claude-code-switcher/actions
 2. Verify the GitHub Release: https://github.com/fanis/claude-code-switcher/releases
-3. Check winget PR: https://github.com/microsoft/winget-pkgs/pulls?q=ClaudeCodeSwitcher
-4. Check Chocolatey: https://community.chocolatey.org/packages/claude-code-switcher.portable
+3. Check that `Publish to WinGet` and `Publish to Scoop` ran after the `Release` job.
+4. If you want Chocolatey for that version, run `Publish to Chocolatey` manually with the version input.
+5. Check winget PRs: https://github.com/microsoft/winget-pkgs/pulls?q=ClaudeCodeSwitcher
+6. Check the Scoop bucket manifest: https://github.com/fanis/scoop-apps/blob/master/bucket/claude-code-switcher.json
+7. Check Chocolatey: https://community.chocolatey.org/packages/claude-code-switcher.portable
 
 ## Repo Secrets
 

@@ -1,8 +1,20 @@
 name: Publish to Scoop
 
 on:
-  release:
-    types: [released]
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+    secrets:
+      WINGET_TOKEN:
+        required: true
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release tag to publish, for example 0.3.1
+        required: true
+        type: string
 
 jobs:
   scoop:
@@ -11,7 +23,7 @@ jobs:
       - name: Download release asset and get hash
         id: hash
         run: |
-          curl -sL "https://github.com/fanis/claude-code-switcher/releases/download/${{ github.event.release.tag_name }}/claude-code-switcher.exe" -o claude-code-switcher.exe
+          curl -sL "https://github.com/fanis/claude-code-switcher/releases/download/${{ inputs.version }}/claude-code-switcher.exe" -o claude-code-switcher.exe
           echo "sha256=$(sha256sum claude-code-switcher.exe | awk '{print $1}')" >> $GITHUB_OUTPUT
 
       - name: Update scoop manifest
@@ -19,7 +31,7 @@ jobs:
         with:
           github-token: ${{ secrets.WINGET_TOKEN }}
           script: |
-            const version = '${{ github.event.release.tag_name }}';
+            const version = '${{ inputs.version }}';
             const hash = '${{ steps.hash.outputs.sha256 }}';
             const manifest = JSON.stringify({
               version,

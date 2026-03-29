@@ -1,15 +1,28 @@
 name: Publish to WinGet
 
 on:
-  release:
-    types: [released]
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+    secrets:
+      WINGET_TOKEN:
+        required: true
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release tag to publish, for example 0.3.1
+        required: true
+        type: string
 
 jobs:
   winget:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: vedantmgoyal9/winget-releaser@v2
         with:
           identifier: Fanis.ClaudeCodeSwitcher
           installers-regex: 'claude-code-switcher\.exe$'
+          release-tag: ${{ inputs.version }}
           token: ${{ secrets.WINGET_TOKEN }}

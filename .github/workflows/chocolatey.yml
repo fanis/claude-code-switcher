@@ -1,8 +1,12 @@
 name: Publish to Chocolatey
 
 on:
-  release:
-    types: [released]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release tag to publish, for example 0.3.1
+        required: true
+        type: string
 
 jobs:
   chocolatey:
@@ -14,7 +18,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p tools
-          gh release download "${{ github.event.release.tag_name }}" --pattern "claude-code-switcher.exe" --dir tools
+          gh release download "${{ inputs.version }}" --pattern "claude-code-switcher.exe" --dir tools
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -22,7 +26,7 @@ jobs:
         shell: pwsh
         run: |
           $hash = (Get-FileHash tools/claude-code-switcher.exe -Algorithm SHA256).Hash
-          $version = "${{ github.event.release.tag_name }}"
+          $version = "${{ inputs.version }}"
           $script = @"
           `$ErrorActionPreference = 'Stop'
           `$toolsDir = "`$(Split-Path -Parent `$MyInvocation.MyCommand.Definition)"
@@ -37,5 +41,5 @@ jobs:
       - name: Pack and push
         shell: pwsh
         run: |
-          choco pack claude-code-switcher.portable.nuspec --version "${{ github.event.release.tag_name }}"
+          choco pack claude-code-switcher.portable.nuspec --version "${{ inputs.version }}"
           choco push (Get-Item claude-code-switcher.portable.*.nupkg).FullName --source https://push.chocolatey.org/ -k ${{ secrets.CHOCO_API_KEY }}
