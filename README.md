@@ -109,7 +109,7 @@ The switcher reads Claude Code's project data from `~/.claude/projects/` directo
 
 
 ## Provenance
-This UserScript was authored by [Fanis Hatzidakis](https://github.com/fanis/claude-code-switcher) with assistance from large-language-model tooling (Claude Code).
+This application was authored by [Fanis Hatzidakis](https://github.com/fanis/claude-code-switcher) with assistance from large-language-model tooling (Claude Code).
 All code was reviewed, tested, and adapted by Fanis.
 
 
