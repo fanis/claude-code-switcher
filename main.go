@@ -19,7 +19,7 @@ func utf16PtrFromString(s string) uintptr {
 	return uintptr(unsafe.Pointer(p))
 }
 
-const appVersion = "0.3.0"
+const appVersion = "0.3.1"
 
 func main() {
 	// Win32 GUI operations must all happen on the same OS thread.

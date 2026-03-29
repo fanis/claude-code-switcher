@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.3.1] - 2026-03-29
+
+### Added
+- Configurable terminal emulator: Windows Terminal, WezTerm, cmd.exe, or custom command
+- Terminal selector dropdown in Settings dialog
+- Custom command support with `{dir}` and `{claude}` placeholders
+- Tab key cycles focus between controls in Settings dialog
+- Welcome message on first-launch onboarding prompt
+
+### Changed
+- Auto-detect mode now tries Windows Terminal, then WezTerm, then cmd.exe (was: wt then cmd)
+- Built-in WezTerm launching now prefers `wezterm.exe` from PATH, opens tabs via `start --new-tab`, hides the helper console window, and suppresses the default handoff info log
+- Built-in WezTerm and custom `wezterm start ...` commands now share the same silent launch behavior
+
 ## [0.3.0] - 2026-03-14
 
 ### Added

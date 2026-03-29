@@ -2,7 +2,7 @@
 
 A fast, native Windows utility for switching between Claude Code projects. Shows all your Claude Code projects in a popup dialog sorted by most recently used, with fuzzy search filtering.
 
-> **Latest Version**: 0.3.0 | [See What's New](CHANGELOG.md)
+> **Latest Version**: 0.3.1 | [See What's New](CHANGELOG.md)
 
 ![Project list sorted by recent use](screenshots/project-list.jpg)
 
@@ -11,7 +11,7 @@ A fast, native Windows utility for switching between Claude Code projects. Shows
 - Native Win32 GUI for minimal startup time
 - Fuzzy search to filter projects as you type
 - Sort by recent use (default) or alphabetically by name
-- Opens selected project in Windows Terminal (falls back to cmd.exe if not installed)
+- Configurable terminal: Windows Terminal, WezTerm, cmd.exe, or custom command
 - Keyboard-driven: fully usable without mouse
 - Launcher-style behavior: closes automatically when losing focus
 - DPI-aware: scales properly on high-DPI displays
@@ -36,11 +36,22 @@ scoop install claude-code-switcher
 
 Download `claude-code-switcher.exe` from the [latest release](https://github.com/fanis/claude-code-switcher/releases/latest) and place it anywhere on your system.
 
+## Terminal Configuration
+
+By default, the switcher auto-detects your terminal (Windows Terminal, then WezTerm, then cmd.exe). You can change this in Settings (F1) or by editing `~/.claude-code-switcher/config.json`:
+
+```json
+{"terminal": "wezterm"}
+```
+
+Options: `""` (auto-detect), `"wt"`, `"wezterm"`, `"cmd"`, or a custom command with `{dir}` and `{claude}` placeholders.
+
+The built-in WezTerm profile prefers `wezterm.exe` from your `PATH` and launches projects with `wezterm start --new-tab`, so it reuses an existing WezTerm window when possible and starts a new one otherwise.
+
 ## Requirements
 
 - Windows 10/11
 - Claude Code installed and used at least once
-- Windows Terminal recommended (optional, falls back to cmd.exe)
 
 ## Building
 
@@ -60,7 +71,7 @@ The `-ldflags="-H windowsgui"` flag prevents a console window from appearing whe
 1. Run `claude-code-switcher.exe`
 2. Type to filter projects by name
 3. Use arrow keys to navigate the list
-4. Press Enter to open the selected project in Windows Terminal
+4. Press Enter to open the selected project in your configured terminal
 5. Press Escape to close without selecting
 
 ![Fuzzy search filtering](screenshots/fuzzy-search.jpg)
