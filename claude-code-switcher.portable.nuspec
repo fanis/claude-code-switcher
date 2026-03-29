@@ -21,7 +21,7 @@
 - Native Win32 GUI for minimal startup time
 - Fuzzy search to filter projects as you type
 - Sort by recent use or alphabetically by name
-- Opens selected project in Windows Terminal (falls back to cmd.exe)
+- Configurable terminal: Windows Terminal, WezTerm, cmd.exe, or custom command
 - Keyboard-driven: fully usable without mouse
 - Launcher-style behavior: closes automatically when losing focus
 - DPI-aware: scales properly on high-DPI displays

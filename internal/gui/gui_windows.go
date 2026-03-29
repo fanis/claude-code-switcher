@@ -56,6 +56,7 @@ var (
 	procGetDpiForWindow      = user32.NewProc("GetDpiForWindow")
 	procPostMessageW         = user32.NewProc("PostMessageW")
 	procEnableWindow         = user32.NewProc("EnableWindow")
+	procIsDialogMessageW     = user32.NewProc("IsDialogMessageW")
 )
 
 const (
@@ -140,6 +141,13 @@ const (
 	BST_UNCHECKED    = 0
 	BS_AUTOCHECKBOX  = 0x0003
 	SS_ETCHEDHORZ    = 0x0010
+
+	CBS_DROPDOWNLIST = 0x0003
+	CBS_HASSTRINGS   = 0x0200
+	CB_ADDSTRING     = 0x0143
+	CB_SETCURSEL     = 0x014E
+	CB_GETCURSEL     = 0x0147
+	CBN_SELCHANGE    = 1
 
 	COLOR_WINDOW     = 5
 	COLOR_HIGHLIGHT  = 13
@@ -324,7 +332,8 @@ func Run(projectList []projects.Project, version string, cfg *config.Config) {
 	if !appConfig.AskedAboutUpdates {
 		appConfig.AskedAboutUpdates = true
 		result := showMessageBox(hwnd,
-			"Would you like to be notified when a new version is available?\n\n"+
+			"Welcome! Thanks for installing Claude Code Switcher.\n\n"+
+				"Would you like to be notified when a new version is available?\n\n"+
 				"You can change this later in Settings.",
 			"Claude Code Switcher",
 			MB_YESNO|MB_ICONQUESTION)
@@ -804,6 +813,8 @@ func onSearchChanged() {
 }
 
 var settingsDlgHwnd uintptr
+var settingsCustomEditHwnd uintptr
+var settingsCustomLabelHwnd uintptr
 
 const (
 	WS_POPUP   = 0x80000000
@@ -811,9 +822,11 @@ const (
 	WS_SYSMENU = 0x00080000
 	SS_CENTER  = 0x0001
 
-	IDC_SETTINGS_CHECK  = 201
-	IDC_SETTINGS_GITHUB = 202
-	IDC_SETTINGS_OK     = 203
+	IDC_SETTINGS_CHECK    = 201
+	IDC_SETTINGS_GITHUB   = 202
+	IDC_SETTINGS_OK       = 203
+	IDC_SETTINGS_TERMINAL = 204
+	IDC_SETTINGS_CUSTOM   = 205
 )
 
 func showSettingsDialog() {
@@ -848,7 +861,7 @@ func showSettingsDialog() {
 		return (base * int(currentDPI)) / 96
 	}
 	dlgWidth := dpiScale(310)
-	dlgHeight := dpiScale(280)
+	dlgHeight := dpiScale(400)
 	dlgX := int(pt.X) + (int(mainRect.Right-mainRect.Left)-dlgWidth)/2
 	dlgY := int(pt.Y) + (int(mainRect.Bottom-mainRect.Top)-dlgHeight)/2
 
@@ -880,6 +893,11 @@ func showSettingsDialog() {
 			procDestroyWindow.Call(settingsDlgHwnd)
 			settingsDlgHwnd = 0
 			break
+		}
+		// IsDialogMessageW handles Tab/Shift+Tab focus cycling
+		handled, _, _ := procIsDialogMessageW.Call(settingsDlgHwnd, uintptr(unsafe.Pointer(&msg)))
+		if handled != 0 {
+			continue
 		}
 		procTranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
 		procDispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))
@@ -937,13 +955,98 @@ func createSettingsControls(hwnd uintptr, hInstance uintptr) {
 		hwnd, 0, hInstance, 0,
 	)
 
+	// --- Terminal section ---
+	termLabel, _, _ := procCreateWindowExW.Call(
+		0,
+		uintptr(unsafe.Pointer(utf16PtrFromString("STATIC"))),
+		uintptr(unsafe.Pointer(utf16PtrFromString("Terminal"))),
+		WS_CHILD|WS_VISIBLE,
+		su(15), su(106), su(270), su(18),
+		hwnd, 0, hInstance, 0,
+	)
+	procSendMessageW.Call(termLabel, WM_SETFONT, hFontBold, 1)
+
+	comboHwnd, _, _ := procCreateWindowExW.Call(
+		0,
+		uintptr(unsafe.Pointer(utf16PtrFromString("COMBOBOX"))),
+		0,
+		WS_CHILD|WS_VISIBLE|WS_TABSTOP|CBS_DROPDOWNLIST|CBS_HASSTRINGS,
+		su(15), su(128), su(270), su(150),
+		hwnd, IDC_SETTINGS_TERMINAL, hInstance, 0,
+	)
+	procSendMessageW.Call(comboHwnd, WM_SETFONT, hFont, 1)
+
+	termOptions := []string{"Auto-detect", "Windows Terminal", "WezTerm", "cmd.exe", "Custom..."}
+	for _, opt := range termOptions {
+		procSendMessageW.Call(comboHwnd, CB_ADDSTRING, 0,
+			uintptr(unsafe.Pointer(utf16PtrFromString(opt))))
+	}
+
+	// Map config value to combo index
+	termIndex := 0
+	customValue := ""
+	switch appConfig.Terminal {
+	case "":
+		termIndex = 0
+	case "wt":
+		termIndex = 1
+	case "wezterm":
+		termIndex = 2
+	case "cmd":
+		termIndex = 3
+	default:
+		termIndex = 4
+		customValue = appConfig.Terminal
+	}
+	procSendMessageW.Call(comboHwnd, CB_SETCURSEL, uintptr(termIndex), 0)
+
+	// Custom command label
+	customLabelStyle := WS_CHILD
+	if termIndex == 4 {
+		customLabelStyle |= WS_VISIBLE
+	}
+	settingsCustomLabelHwnd, _, _ = procCreateWindowExW.Call(
+		0,
+		uintptr(unsafe.Pointer(utf16PtrFromString("STATIC"))),
+		uintptr(unsafe.Pointer(utf16PtrFromString("Use {dir} and {claude} as placeholders:"))),
+		uintptr(customLabelStyle),
+		su(15), su(154), su(270), su(16),
+		hwnd, 0, hInstance, 0,
+	)
+	procSendMessageW.Call(settingsCustomLabelHwnd, WM_SETFONT, hFontSmall, 1)
+
+	// Custom command edit
+	customStyle := WS_CHILD | WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL
+	if termIndex == 4 {
+		customStyle |= WS_VISIBLE
+	}
+	settingsCustomEditHwnd, _, _ = procCreateWindowExW.Call(
+		0,
+		uintptr(unsafe.Pointer(utf16PtrFromString("EDIT"))),
+		uintptr(unsafe.Pointer(utf16PtrFromString(customValue))),
+		uintptr(customStyle),
+		su(15), su(172), su(270), su(24),
+		hwnd, IDC_SETTINGS_CUSTOM, hInstance, 0,
+	)
+	procSendMessageW.Call(settingsCustomEditHwnd, WM_SETFONT, hFont, 1)
+
+	// --- Separator ---
+	procCreateWindowExW.Call(
+		0,
+		uintptr(unsafe.Pointer(utf16PtrFromString("STATIC"))),
+		0,
+		WS_CHILD|WS_VISIBLE|SS_ETCHEDHORZ,
+		su(15), su(206), su(270), su(2),
+		hwnd, 0, hInstance, 0,
+	)
+
 	// --- About section ---
 	aboutLabel, _, _ := procCreateWindowExW.Call(
 		0,
 		uintptr(unsafe.Pointer(utf16PtrFromString("STATIC"))),
 		uintptr(unsafe.Pointer(utf16PtrFromString("About"))),
 		WS_CHILD|WS_VISIBLE,
-		su(15), su(106), su(270), su(18),
+		su(15), su(216), su(270), su(18),
 		hwnd, 0, hInstance, 0,
 	)
 	procSendMessageW.Call(aboutLabel, WM_SETFONT, hFontBold, 1)
@@ -957,7 +1060,7 @@ func createSettingsControls(hwnd uintptr, hInstance uintptr) {
 		uintptr(unsafe.Pointer(utf16PtrFromString("STATIC"))),
 		uintptr(unsafe.Pointer(utf16PtrFromString(titleText))),
 		WS_CHILD|WS_VISIBLE|SS_CENTER,
-		su(15), su(128), su(270), su(18),
+		su(15), su(238), su(270), su(18),
 		hwnd, 0, hInstance, 0,
 	)
 	procSendMessageW.Call(titleHwnd, WM_SETFONT, hFont, 1)
@@ -967,7 +1070,7 @@ func createSettingsControls(hwnd uintptr, hInstance uintptr) {
 		uintptr(unsafe.Pointer(utf16PtrFromString("STATIC"))),
 		uintptr(unsafe.Pointer(utf16PtrFromString("by Fanis Hatzidakis"))),
 		WS_CHILD|WS_VISIBLE|SS_CENTER,
-		su(15), su(146), su(270), su(16),
+		su(15), su(256), su(270), su(16),
 		hwnd, 0, hInstance, 0,
 	)
 	procSendMessageW.Call(authorHwnd, WM_SETFONT, hFontSmall, 1)
@@ -978,7 +1081,7 @@ func createSettingsControls(hwnd uintptr, hInstance uintptr) {
 		uintptr(unsafe.Pointer(utf16PtrFromString("BUTTON"))),
 		uintptr(unsafe.Pointer(utf16PtrFromString("Open GitHub"))),
 		WS_CHILD|WS_VISIBLE|WS_TABSTOP,
-		su(15), su(195), su(100), su(26),
+		su(15), su(310), su(100), su(26),
 		hwnd, IDC_SETTINGS_GITHUB, hInstance, 0,
 	)
 	procSendMessageW.Call(githubHwnd, WM_SETFONT, hFont, 1)
@@ -988,7 +1091,7 @@ func createSettingsControls(hwnd uintptr, hInstance uintptr) {
 		uintptr(unsafe.Pointer(utf16PtrFromString("BUTTON"))),
 		uintptr(unsafe.Pointer(utf16PtrFromString("OK"))),
 		WS_CHILD|WS_VISIBLE|WS_TABSTOP,
-		su(200), su(195), su(80), su(26),
+		su(200), su(310), su(80), su(26),
 		hwnd, IDC_SETTINGS_OK, hInstance, 0,
 	)
 	procSendMessageW.Call(okHwnd, WM_SETFONT, hFont, 1)
@@ -1021,6 +1124,36 @@ func settingsDlgProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 				config.Save(appConfig)
 			}
 			return 0
+		case IDC_SETTINGS_TERMINAL:
+			if wmEvent == CBN_SELCHANGE {
+				sel, _, _ := procSendMessageW.Call(
+					getDlgItem(hwnd, IDC_SETTINGS_TERMINAL), CB_GETCURSEL, 0, 0)
+				termValues := []string{"", "wt", "wezterm", "cmd"}
+				if int(sel) < len(termValues) {
+					appConfig.Terminal = termValues[sel]
+					procShowWindow.Call(settingsCustomLabelHwnd, 0) // SW_HIDE
+					procShowWindow.Call(settingsCustomEditHwnd, 0)
+				} else {
+					// Custom selected
+					appConfig.Terminal = getWindowText(settingsCustomEditHwnd)
+					procShowWindow.Call(settingsCustomLabelHwnd, SW_SHOW)
+					procShowWindow.Call(settingsCustomEditHwnd, SW_SHOW)
+					procSetFocus.Call(settingsCustomEditHwnd)
+				}
+				config.Save(appConfig)
+			}
+			return 0
+		case IDC_SETTINGS_CUSTOM:
+			if wmEvent == EN_CHANGE {
+				// Only save if Custom is selected in the dropdown
+				sel, _, _ := procSendMessageW.Call(
+					getDlgItem(hwnd, IDC_SETTINGS_TERMINAL), CB_GETCURSEL, 0, 0)
+				if sel == 4 {
+					appConfig.Terminal = getWindowText(settingsCustomEditHwnd)
+					config.Save(appConfig)
+				}
+			}
+			return 0
 		}
 	case WM_CTLCOLORSTATIC:
 		return hWhiteBrush
@@ -1040,6 +1173,16 @@ func settingsDlgProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 func getDlgItem(hwnd uintptr, id uintptr) uintptr {
 	ret, _, _ := procGetDlgItem.Call(hwnd, id)
 	return ret
+}
+
+func getWindowText(hwnd uintptr) string {
+	length, _, _ := procGetWindowTextLengthW.Call(hwnd)
+	if length == 0 {
+		return ""
+	}
+	buf := make([]uint16, length+1)
+	procGetWindowTextW.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), length+1)
+	return syscall.UTF16ToString(buf)
 }
 
 func showUpdateNotification() {
@@ -1129,7 +1272,7 @@ func onProjectSelected() {
 	// Open in Windows Terminal
 	// Set flag to prevent close on focus loss during terminal dialogs
 	showingDialog = true
-	err := terminal.OpenInWindowsTerminal(proj.Path)
+	err := terminal.OpenProject(proj.Path, appConfig.Terminal)
 	showingDialog = false
 
 	if err != nil {

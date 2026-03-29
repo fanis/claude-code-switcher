@@ -28,19 +28,32 @@ func SetParentHwnd(hwnd uintptr) {
 	parentHwnd = hwnd
 }
 
-// OpenInWindowsTerminal opens Windows Terminal (or cmd.exe fallback) with the given directory
-// and executes 'claude' command
-func OpenInWindowsTerminal(projectPath string) error {
-	logDebug("OpenInWindowsTerminal called for: %s", projectPath)
+// OpenProject opens a terminal with the given directory and executes claude.
+// The terminalSetting controls which terminal to use:
+//   - "" (empty): auto-detect (wt -> wezterm -> cmd)
+//   - "wt": Windows Terminal
+//   - "wezterm": WezTerm
+//   - "cmd": cmd.exe
+//   - anything else: custom command with optional {dir} and {claude} placeholders
+func OpenProject(projectPath, terminalSetting string) error {
+	logDebug("OpenProject called for: %s (terminal=%q)", projectPath, terminalSetting)
 
 	// Reject paths containing double quotes to prevent command injection
 	if strings.Contains(projectPath, `"`) {
 		return fmt.Errorf("project path contains invalid character: %s", projectPath)
 	}
 
-	// Check if claude is installed
+	switch terminalSetting {
+	case "", "wt", "wezterm", "cmd":
+		return openWithPreset(projectPath, terminalSetting)
+	default:
+		return openWithCustom(projectPath, terminalSetting)
+	}
+}
+
+// openWithPreset handles built-in terminal presets and auto-detection.
+func openWithPreset(projectPath, preset string) error {
 	claudePath := findClaude()
-	logDebug("findClaude returned: %s", claudePath)
 	if claudePath == "" {
 		showErrorDialog("Claude Code Not Found",
 			"Claude Code executable was not found.\n\n"+
@@ -54,26 +67,123 @@ func OpenInWindowsTerminal(projectPath string) error {
 	}
 	logDebug("Found claude at: %s", claudePath)
 
-	// Try Windows Terminal first, fall back to cmd.exe
-	wtPath := findWindowsTerminal()
-	wtFound := wtPath != ""
-
-	if wtFound {
-		logDebug("Found Windows Terminal: %s", wtPath)
-		err := launchWithWT(wtPath, projectPath, claudePath)
-		if err == nil {
-			return nil
+	if preset == "wt" {
+		wtPath := findWindowsTerminal()
+		if wtPath == "" {
+			return fmt.Errorf("Windows Terminal not found")
 		}
-		logDebug("Windows Terminal failed: %v, falling back to cmd.exe", err)
-	} else {
-		logDebug("Windows Terminal not found, using cmd.exe")
+		return launchWithWT(wtPath, projectPath, claudePath)
 	}
 
-	return launchWithCmd(projectPath, claudePath, wtFound)
+	if preset == "wezterm" {
+		weztermPath := findWezTerm()
+		if weztermPath == "" {
+			return fmt.Errorf("WezTerm not found")
+		}
+		return launchWithWezTerm(weztermPath, projectPath, claudePath)
+	}
+
+	if preset == "cmd" {
+		return launchWithCmd(projectPath, claudePath, false)
+	}
+
+	// Auto-detect: wt -> wezterm -> cmd
+	wtPath := findWindowsTerminal()
+	if wtPath != "" {
+		logDebug("Auto: found Windows Terminal: %s", wtPath)
+		if err := launchWithWT(wtPath, projectPath, claudePath); err == nil {
+			return nil
+		}
+		logDebug("Auto: Windows Terminal failed, trying next")
+	}
+
+	weztermPath := findWezTerm()
+	if weztermPath != "" {
+		logDebug("Auto: found WezTerm: %s", weztermPath)
+		if err := launchWithWezTerm(weztermPath, projectPath, claudePath); err == nil {
+			return nil
+		}
+		logDebug("Auto: WezTerm failed, trying next")
+	}
+
+	logDebug("Auto: falling back to cmd.exe")
+	return launchWithCmd(projectPath, claudePath, wtPath != "" || weztermPath != "")
+}
+
+// openWithCustom launches a custom terminal command with placeholder substitution.
+// Supported placeholders: {dir} for project path, {claude} for claude executable path.
+// If no placeholders are present, the command is run as-is.
+func openWithCustom(projectPath, command string) error {
+	// Only find claude if the command uses {claude}
+	expandedCmd := command
+	if strings.Contains(command, "{claude}") {
+		claudePath := findClaude()
+		if claudePath == "" {
+			showErrorDialog("Claude Code Not Found",
+				"Claude Code executable was not found.\n\n"+
+					"Please install Claude Code and try again.")
+			return fmt.Errorf("claude executable not found")
+		}
+		expandedCmd = strings.ReplaceAll(expandedCmd, "{claude}", claudePath)
+	}
+	expandedCmd = strings.ReplaceAll(expandedCmd, "{dir}", projectPath)
+
+	logDebug("Custom terminal: %s", expandedCmd)
+
+	// Split into executable and arguments
+	// Handles quoted paths: "C:\Program Files\term.exe" -arg1 -arg2
+	parts := splitCommand(expandedCmd)
+	if len(parts) == 0 {
+		return fmt.Errorf("empty terminal command")
+	}
+
+	cmd := exec.Command(parts[0], parts[1:]...)
+	if isWezTermStart(parts) {
+		cmd.Env = append(os.Environ(), "WEZTERM_LOG=error")
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	}
+	logDebug("exec.Command: %s %v", parts[0], parts[1:])
+
+	return cmd.Start()
+}
+
+func isWezTermStart(parts []string) bool {
+	if len(parts) < 2 {
+		return false
+	}
+	base := strings.ToLower(filepath.Base(parts[0]))
+	return (base == "wezterm" || base == "wezterm.exe") && strings.EqualFold(parts[1], "start")
+}
+
+// splitCommand splits a command string into executable and arguments,
+// respecting double-quoted segments.
+func splitCommand(s string) []string {
+	var parts []string
+	var current strings.Builder
+	inQuote := false
+
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if ch == '"' {
+			inQuote = !inQuote
+			continue
+		}
+		if ch == ' ' && !inQuote {
+			if current.Len() > 0 {
+				parts = append(parts, current.String())
+				current.Reset()
+			}
+			continue
+		}
+		current.WriteByte(ch)
+	}
+	if current.Len() > 0 {
+		parts = append(parts, current.String())
+	}
+	return parts
 }
 
 // launchWithWT launches Windows Terminal directly using exec.Command
-// (ShellExecute on the WindowsApps alias doesn't respect -w 0 for tab reuse)
 func launchWithWT(wtPath, projectPath, claudePath string) error {
 	// -w 0: reuse the most recent WT window instead of opening a new one
 	// nt: explicitly open a new tab
@@ -89,8 +199,24 @@ func launchWithWT(wtPath, projectPath, claudePath string) error {
 	return nil
 }
 
+// launchWithWezTerm launches WezTerm, opening a new tab in an existing GUI
+// window or starting a new GUI window if none exists.
+func launchWithWezTerm(weztermPath, projectPath, claudePath string) error {
+	cmd := exec.Command(weztermPath, "start", "--new-tab", "--cwd", projectPath, "--", claudePath)
+	cmd.Env = append(os.Environ(), "WEZTERM_LOG=error")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	logDebug("exec.Command: %s %v", weztermPath, cmd.Args[1:])
+
+	err := cmd.Start()
+	if err != nil {
+		logDebug("exec.Command failed: %v", err)
+		return err
+	}
+	return nil
+}
+
 // launchWithCmd launches plain cmd.exe as fallback
-func launchWithCmd(projectPath, claudePath string, wtWasFound bool) error {
+func launchWithCmd(projectPath, claudePath string, otherWasFound bool) error {
 	shell32 := syscall.NewLazyDLL("shell32.dll")
 	shellExecute := shell32.NewProc("ShellExecuteW")
 
@@ -111,11 +237,11 @@ func launchWithCmd(projectPath, claudePath string, wtWasFound bool) error {
 	logDebug("ShellExecute returned: %d, err: %v", ret, err)
 
 	if ret <= 32 {
-		wtStatus := "not found"
-		if wtWasFound {
-			wtStatus = "failed"
+		otherStatus := "not found"
+		if otherWasFound {
+			otherStatus = "failed"
 		}
-		return fmt.Errorf("could not open terminal.\n\nTried:\n- Windows Terminal (%s)\n- cmd.exe (failed with code %d)\n\nCheck that the project path exists:\n%s", wtStatus, ret, projectPath)
+		return fmt.Errorf("could not open terminal.\n\nTried:\n- Other terminals (%s)\n- cmd.exe (failed with code %d)\n\nCheck that the project path exists:\n%s", otherStatus, ret, projectPath)
 	}
 	return nil
 }
@@ -130,6 +256,22 @@ func findWindowsTerminal() string {
 	if _, err := os.Stat(wtPath); err == nil {
 		return wtPath
 	}
+	return ""
+}
+
+// findWezTerm returns full path to wezterm.exe if found
+func findWezTerm() string {
+	// Prefer PATH so users can override the installed copy.
+	if path, err := exec.LookPath("wezterm"); err == nil {
+		return path
+	}
+
+	// Common install location
+	path := `C:\Program Files\WezTerm\wezterm.exe`
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+
 	return ""
 }
 

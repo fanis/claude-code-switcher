@@ -17,6 +17,7 @@ type Config struct {
 	LastCheckDate      string `json:"last_check_date"`
 	PendingVersion     string `json:"pending_version"`
 	PendingURL         string `json:"pending_url"`
+	Terminal           string `json:"terminal"`
 }
 
 func configDir() (string, error) {

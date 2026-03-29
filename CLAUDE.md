@@ -18,7 +18,7 @@ go test ./internal/projects
 
 ## Architecture
 
-Windows-only native GUI application written in Go. Reads Claude Code project data from `~/.claude/projects/` and opens selected projects in Windows Terminal via `wt.exe`.
+Windows-only native GUI application written in Go. Reads Claude Code project data from `~/.claude/projects/` and opens selected projects in a configurable terminal emulator.
 
 ### Package Structure
 
@@ -26,8 +26,8 @@ Windows-only native GUI application written in Go. Reads Claude Code project dat
 - `internal/projects/` - Reads `~/.claude/projects/*/sessions-index.json`, extracts cwd from session `.jsonl` files, or decodes paths from encoded directory names (e.g., `c--work-project` -> `c:\work\project`). Validates path existence on disk. "Last used" comes from session `modified` field (sessions-index.json) or `.jsonl` file modtime (fallback) - never use directory modtime (unreliable, changed by Claude housekeeping).
 - `internal/gui/` - Native Win32 GUI via syscall (user32, gdi32, kernel32, comctl32). Owner-drawn listbox with custom item rendering. Subclasses edit control for keyboard navigation (arrows/Enter/Escape)
 - `internal/fuzzy/` - Fuzzy string matching with scoring (consecutive bonus, word boundary bonus, start-of-text bonus)
-- `internal/terminal/` - Launches Windows Terminal via exec.Command. Falls back to cmd.exe via ShellExecute if wt.exe not found
-- `internal/config/` - JSON config persistence at `~/.claude-code-switcher/config.json` (update check preferences, pending version state)
+- `internal/terminal/` - Configurable terminal launching. Supports Windows Terminal, WezTerm, cmd.exe, and custom commands. Auto-detect mode tries wt -> wezterm -> cmd. Custom commands support `{dir}` and `{claude}` placeholders
+- `internal/config/` - JSON config persistence at `~/.claude-code-switcher/config.json` (update check preferences, pending version state, terminal selection)
 - `internal/update/` - Lightweight GitHub Releases API check, semver comparison, notification dedup logic (max once/day, dismissed versions tracked)
 - `internal/process/` - Process enumeration via Toolhelp32 (currently unused, kept for future "active project" detection)
 
@@ -46,7 +46,14 @@ Windows-only native GUI application written in Go. Reads Claude Code project dat
 
 ### Terminal Launching
 
-Uses exec.Command for Windows Terminal and ShellExecute for cmd.exe fallback. Finds claude's full path since app launchers like Everything/Keypirinha don't inherit the user's PATH. Debug logging writes to `~/claude-switcher-debug.log`.
+Configurable via `terminal` field in config.json and the Settings dialog dropdown. Finds claude's full path since app launchers like Everything/Keypirinha don't inherit the user's PATH. Debug logging writes to `~/claude-switcher-debug.log`.
+
+Terminal modes:
+- `""` (auto-detect): tries wt -> wezterm -> cmd in order
+- `"wt"`: Windows Terminal only
+- `"wezterm"`: WezTerm only
+- `"cmd"`: cmd.exe only
+- Custom string: run as-is with optional `{dir}` and `{claude}` placeholders (no placeholders = run verbatim)
 
 Claude path search order (checked in this order to avoid PATH lookup delays):
 1. `~/.local/bin/claude.exe` - official installer location
@@ -57,11 +64,11 @@ Claude path search order (checked in this order to avoid PATH lookup delays):
 
 Each location also checks alternative extensions (.exe, .cmd, or extensionless) where applicable.
 
-Windows Terminal is found via `%LOCALAPPDATA%/Microsoft/WindowsApps/wt.exe`.
+Windows Terminal: found via `%LOCALAPPDATA%/Microsoft/WindowsApps/wt.exe`. Syntax: `wt.exe -w 0 nt -d "path" -- "claude.exe"`. The `-w 0` reuses the most recent WT window, `nt` opens a new tab, `--` prevents wt.exe from misinterpreting the command as options. Tab reuse requires the switcher to run at the same elevation level as the existing WT window.
 
-Windows Terminal syntax: `wt.exe -w 0 nt -d "path" -- "claude.exe"`. The `-w 0` reuses the most recent WT window, `nt` opens a new tab, `--` prevents wt.exe from misinterpreting the command as options. Note: tab reuse requires the switcher to run at the same elevation level as the existing WT window.
+WezTerm: found via PATH lookup first, then `C:\Program Files\WezTerm\wezterm.exe`. Syntax: `wezterm.exe start --new-tab --cwd "path" -- "claude.exe"`. Reuses an existing WezTerm GUI window when possible and starts a new one otherwise. The switcher launches WezTerm via `exec.Command`, hides the helper console window with `SysProcAttr.HideWindow`, and sets `WEZTERM_LOG=error` to suppress the default handoff info log.
 
-Fallback: `cmd.exe /k cd /d "path" && "claude.exe"` when wt.exe not found (silent fallback, no dialog).
+cmd.exe fallback: `cmd.exe /k cd /d "path" && "claude.exe"` via ShellExecute.
 
 ### Path Resolution
 
@@ -78,7 +85,7 @@ Claude's path encoding converts both path separators (`\`) and dots (`.`) to hyp
 - Sort button toggles between "By: Recent" and "By: Name" (Tab key also toggles)
 - Keyboard shortcuts: arrows to navigate, Enter to open, Escape to close, F1 for Settings, Ctrl+Backspace to delete word
 - DPI-aware: font sizes and item heights scale with display DPI
-- Settings dialog (gear icon button): update check toggle (checkbox) + about info, uses `WM_CTLCOLORSTATIC` for white backgrounds
+- Settings dialog (gear icon button): update check toggle, terminal selector (dropdown + custom command input), about info. Uses `WM_CTLCOLORSTATIC` for white backgrounds, `IsDialogMessageW` for Tab focus cycling
 - One-time onboarding prompt on first launch asking about update notifications (`asked_about_updates` config flag)
 - Two-phase update check: background goroutine writes `pending_version`/`pending_url` to config, next launch shows notification via `WM_APP_UPDATE` custom message
 - List items: project name + right-aligned timestamp on first line, path on second line
@@ -112,3 +119,4 @@ Set `CLAUDE_SWITCHER_DEBUG=1` environment variable to enable debug logging to `~
 - Before committing/pushing, always update docs (CLAUDE.md, CHANGELOG.md, README.md) first
 - Always show the full diff for review before pushing
 - Version lives in three places: `main.go` (appVersion const), `README.md` (badge), `CHANGELOG.md` (new section)
+- Git identity rule: ask the user `work` or `personal` before the first commit/push in a repo unless the identity is already explicit. For personal repos, use the user's personal identity and `github.com-personal` SSH host in remotes when setting or changing remotes.
