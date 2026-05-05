@@ -63,7 +63,7 @@ jobs:
             $url
 
           The download is verified against the SHA256 checksum below, which was
-          computed from the exact GitHub Releases asset for version $version:
+          computed from the exact GitHub Releases asset for version ${version}:
 
             SHA256: $hash
 
