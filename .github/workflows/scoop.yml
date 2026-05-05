@@ -39,7 +39,7 @@ jobs:
               homepage: "https://github.com/fanis/claude-code-switcher",
               license: {
                 identifier: "PolyForm-Internal-Use-1.0.0",
-                url: "https://github.com/fanis/claude-code-switcher/blob/master/LICENCE.md"
+                url: "https://github.com/fanis/claude-code-switcher/blob/master/LICENSE.md"
               },
               url: `https://github.com/fanis/claude-code-switcher/releases/download/${version}/claude-code-switcher.exe#/claude-code-switcher.exe`,
               hash,

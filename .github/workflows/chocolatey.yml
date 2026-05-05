@@ -1,6 +1,14 @@
 name: Publish to Chocolatey
 
 on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+    secrets:
+      CHOCO_API_KEY:
+        required: true
   workflow_dispatch:
     inputs:
       version:
@@ -14,32 +22,76 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download release asset
-        shell: bash
-        run: |
-          mkdir -p tools
-          gh release download "${{ inputs.version }}" --pattern "claude-code-switcher.exe" --dir tools
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Generate install script
+      - name: Stage chocolatey package
         shell: pwsh
         run: |
-          $hash = (Get-FileHash tools/claude-code-switcher.exe -Algorithm SHA256).Hash
           $version = "${{ inputs.version }}"
-          $script = @"
+
+          New-Item -ItemType Directory -Path chocopack/tools | Out-Null
+          Copy-Item claude-code-switcher.portable.nuspec chocopack/
+
+          # Download the released binary to a temp location only to compute its hash.
+          # The binary is NOT included in the package; Get-ChocolateyWebFile fetches it
+          # at install time directly from the official GitHub Releases URL.
+          $tmp = New-Item -ItemType Directory -Path "$env:RUNNER_TEMP/ccs-hash"
+          gh release download $version --pattern "claude-code-switcher.exe" --dir $tmp.FullName
+          $hash = (Get-FileHash "$($tmp.FullName)/claude-code-switcher.exe" -Algorithm SHA256).Hash
+
+          $url = "https://github.com/fanis/claude-code-switcher/releases/download/$version/claude-code-switcher.exe"
+
+          $install = @"
           `$ErrorActionPreference = 'Stop'
           `$toolsDir = "`$(Split-Path -Parent `$MyInvocation.MyCommand.Definition)"
           Get-ChocolateyWebFile -PackageName `$env:ChocolateyPackageName ``
             -FileFullPath "`$toolsDir\claude-code-switcher.exe" ``
-            -Url "https://github.com/fanis/claude-code-switcher/releases/download/$version/claude-code-switcher.exe" ``
+            -Url "$url" ``
             -Checksum '$hash' ``
             -ChecksumType 'sha256'
           "@
-          Set-Content -Path tools/chocolateyInstall.ps1 -Value $script
+          Set-Content -Path chocopack/tools/chocolateyInstall.ps1 -Value $install
+
+          $verification = @"
+          VERIFICATION
+
+          Verification is intended to assist the Chocolatey moderators and community
+          in verifying that this package's contents are trustworthy.
+
+          The claude-code-switcher.exe binary is NOT bundled in this package. It is
+          downloaded at install time by Get-ChocolateyWebFile from the official
+          GitHub Releases page of the project:
+
+            $url
+
+          The download is verified against the SHA256 checksum below, which was
+          computed from the exact GitHub Releases asset for version $version:
+
+            SHA256: $hash
+
+          To verify manually:
+
+            1. Download the asset from the URL above.
+            2. Compute its SHA256 hash, for example with PowerShell:
+                 Get-FileHash claude-code-switcher.exe -Algorithm SHA256
+            3. Confirm the hash matches the value above.
+
+          The source code for this release is available at:
+
+            https://github.com/fanis/claude-code-switcher/tree/$version
+
+          The software is published under the PolyForm Internal Use License 1.0.0.
+          See LICENSE.txt in this tools directory, or:
+
+            https://github.com/fanis/claude-code-switcher/blob/master/LICENSE.md
+          "@
+          Set-Content -Path chocopack/tools/VERIFICATION.txt -Value $verification
+
+          Copy-Item LICENSE.md chocopack/tools/LICENSE.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Pack and push
         shell: pwsh
+        working-directory: chocopack
         run: |
           choco pack claude-code-switcher.portable.nuspec --version "${{ inputs.version }}"
           choco push (Get-Item claude-code-switcher.portable.*.nupkg).FullName --source https://push.chocolatey.org/ -k ${{ secrets.CHOCO_API_KEY }}

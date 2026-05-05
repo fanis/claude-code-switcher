@@ -32,6 +32,12 @@ scoop bucket add fanis https://github.com/fanis/scoop-apps
 scoop install claude-code-switcher
 ```
 
+### Chocolatey
+
+```bash
+choco install claude-code-switcher.portable
+```
+
 ### Manual download
 
 Download `claude-code-switcher.exe` from the [latest release](https://github.com/fanis/claude-code-switcher/releases/latest) and place it anywhere on your system.
@@ -119,4 +125,4 @@ Copyright (c) 2026 Fanis Hatzidakis
 
 Licensed under PolyForm Internal Use License 1.0.0
 
-See LICENCE.md
+See LICENSE.md

@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Fanis Hatzidakis
-// Licensed under PolyForm Internal Use License 1.0.0 - see LICENCE.md
+// Licensed under PolyForm Internal Use License 1.0.0 - see LICENSE.md
 
 package update
 

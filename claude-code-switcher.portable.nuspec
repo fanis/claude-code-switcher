@@ -7,9 +7,10 @@
     <authors>Fanis Hatzidakis</authors>
     <owners>fanis</owners>
     <projectUrl>https://github.com/fanis/claude-code-switcher</projectUrl>
-    <licenseUrl>https://github.com/fanis/claude-code-switcher/blob/master/LICENCE.md</licenseUrl>
+    <licenseUrl>https://github.com/fanis/claude-code-switcher/blob/master/LICENSE.md</licenseUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <projectSourceUrl>https://github.com/fanis/claude-code-switcher</projectSourceUrl>
+    <packageSourceUrl>https://github.com/fanis/claude-code-switcher</packageSourceUrl>
     <bugTrackerUrl>https://github.com/fanis/claude-code-switcher/issues</bugTrackerUrl>
     <releaseNotes>https://github.com/fanis/claude-code-switcher/blob/master/CHANGELOG.md</releaseNotes>
     <tags>claude claude-code developer-tools windows-terminal portable</tags>

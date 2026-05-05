@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Renamed `LICENCE.md` to `LICENSE.md` so packaging tools detect it automatically
+- Chocolatey package no longer bundles the binary: it is downloaded at install time from the official GitHub release with a SHA256 checksum, and a `VERIFICATION.txt` is included describing how to verify it
+
 ## [0.3.1] - 2026-03-29
 
 ### Added

@@ -73,3 +73,10 @@ jobs:
     with:
       version: ${{ needs.release.outputs.version }}
     secrets: inherit
+
+  chocolatey:
+    needs: release
+    uses: ./.github/workflows/chocolatey.yml
+    with:
+      version: ${{ needs.release.outputs.version }}
+    secrets: inherit
