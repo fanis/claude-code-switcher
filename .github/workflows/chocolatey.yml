@@ -49,43 +49,6 @@ jobs:
             -ChecksumType 'sha256'
           "@
           Set-Content -Path chocopack/tools/chocolateyInstall.ps1 -Value $install
-
-          $verification = @"
-          VERIFICATION
-
-          Verification is intended to assist the Chocolatey moderators and community
-          in verifying that this package's contents are trustworthy.
-
-          The claude-code-switcher.exe binary is NOT bundled in this package. It is
-          downloaded at install time by Get-ChocolateyWebFile from the official
-          GitHub Releases page of the project:
-
-            $url
-
-          The download is verified against the SHA256 checksum below, which was
-          computed from the exact GitHub Releases asset for version ${version}:
-
-            SHA256: $hash
-
-          To verify manually:
-
-            1. Download the asset from the URL above.
-            2. Compute its SHA256 hash, for example with PowerShell:
-                 Get-FileHash claude-code-switcher.exe -Algorithm SHA256
-            3. Confirm the hash matches the value above.
-
-          The source code for this release is available at:
-
-            https://github.com/fanis/claude-code-switcher/tree/$version
-
-          The software is published under the PolyForm Internal Use License 1.0.0.
-          See LICENSE.txt in this tools directory, or:
-
-            https://github.com/fanis/claude-code-switcher/blob/master/LICENSE.md
-          "@
-          Set-Content -Path chocopack/tools/VERIFICATION.txt -Value $verification
-
-          Copy-Item LICENSE.md chocopack/tools/LICENSE.txt
         env:
           GH_TOKEN: ${{ github.token }}
 

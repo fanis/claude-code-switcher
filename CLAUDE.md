@@ -110,6 +110,19 @@ See [DEPLOY.md](DEPLOY.md) for full procedure. Summary:
 
 Tag format must be `X.Y.Z` (e.g., `0.1.1`) to trigger the release workflow.
 
+### Chocolatey package
+
+- The chocolatey package does NOT bundle `claude-code-switcher.exe`. `chocolateyInstall.ps1` uses `Get-ChocolateyWebFile` to download it from the GitHub release at install time with a pinned SHA256. This avoids the moderation queue's "binaries included" flag and keeps the `.nupkg` small.
+- The package ships ONLY `tools/chocolateyInstall.ps1`. No `VERIFICATION.txt`, no `LICENSE.txt`. Chocolatey moderators require those only when the installer/binary is embedded in the package; for download-at-install packages the pinned SHA256 checksum in the install script is the verification. Moderator "Windos" rejected `claude-code-switcher.portable` for including them (2026-05-14). Don't re-add them.
+- The workflow packs from a clean `chocopack/` staging directory, never the repo root, so `.gitignore` etc. cannot leak into the `.nupkg` (chocolatey moderators reject packages containing source-control ignore files).
+- Manually republish against an existing GitHub release without a new tag: `gh workflow run chocolatey.yml -R fanis/claude-code-switcher -f version=X.Y.Z`. Useful when moderators flag a package fix.
+- PowerShell here-string gotcha: `$version:` parses as a scope/drive reference and breaks the here-string. Always use `${version}:` when a variable is followed by `:`. Same applies to other interpolated variables.
+
+### License file
+
+- The license file is `LICENSE.md` (American spelling), not `LICENCE.md`. Packaging tools' auto-detection looks for `LICENSE.*`. Don't rename it back.
+- The project has no icon (no `.ico`/`.syso` resource, no `iconUrl` in the nuspec). The chocolatey "iconUrl" Guideline is intentionally unaddressed; the default Windows icon is acceptable until a proper icon is designed.
+
 ## Debug Logging
 
 Set `CLAUDE_SWITCHER_DEBUG=1` environment variable to enable debug logging to `~/claude-switcher-debug.log`.
