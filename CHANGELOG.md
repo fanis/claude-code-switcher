@@ -7,7 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Crash when pressing Enter with an empty (fully filtered) project list: the "no selection" result of `LB_GETCURSEL` was compared as a 32-bit value and never matched on 64-bit Windows
+- Opening the Settings dialog repeatedly leaked a Win32 callback per open (Go callbacks are limited and never released), eventually crashing the app
+- Fuzzy search and Ctrl+Backspace word deletion now handle non-ASCII characters correctly (rune-aware matching; UTF-16-aware cursor math)
+- Data race between the background update check and the UI thread when reading/saving the config
+- Bold/small fonts and the dialog background brush are now released on window destruction (previously leaked)
+- Down arrow now selects the first item when nothing is selected instead of doing nothing
+- Settings button is now disabled along with the other controls while a project is opening
+- Config file is written atomically (temp file + rename) so a crash mid-save can't corrupt it
+
 ### Changed
+- Project directories are scanned concurrently at startup, so one slow path (e.g. a dead network drive) no longer stalls launch
+- List drawing no longer re-resolves GDI/user32 functions on every painted item
+- Search strings are cached instead of being rebuilt on every keystroke
+- Sorting (projects and search results) is now stable, keeping equal entries in a deterministic order
+- Removed unused code: `update.ShouldNotify`, `terminal.showInfoDialog`, `terminal.FocusWindow`
+- `decodePath` unit tests now pass on non-Windows hosts too
 - Renamed `LICENCE.md` to `LICENSE.md` so packaging tools detect it automatically
 - Chocolatey package no longer bundles the binary: it is downloaded at install time from the official GitHub release with a SHA256 checksum, and a `VERIFICATION.txt` is included describing how to verify it
 
