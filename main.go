@@ -14,9 +14,12 @@ import (
 	"github.com/fanis/claude-code-switcher/internal/projects"
 )
 
-func utf16PtrFromString(s string) uintptr {
+// utf16PtrFromString returns a *uint16 rather than uintptr so the buffer
+// stays referenced until the syscall argument conversion happens at the
+// call site (a stored uintptr would not keep it alive).
+func utf16PtrFromString(s string) *uint16 {
 	p, _ := syscall.UTF16PtrFromString(s)
-	return uintptr(unsafe.Pointer(p))
+	return p
 }
 
 const appVersion = "0.3.1"
@@ -56,8 +59,8 @@ func showError(title, message string) {
 
 	messageBox.Call(
 		0,
-		utf16PtrFromString(message),
-		utf16PtrFromString(title),
+		uintptr(unsafe.Pointer(utf16PtrFromString(message))),
+		uintptr(unsafe.Pointer(utf16PtrFromString(title))),
 		MB_OK|MB_ICONERROR,
 	)
 }
