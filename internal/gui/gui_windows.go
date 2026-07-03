@@ -275,6 +275,13 @@ func negInt(n int) uintptr {
 	return uintptr(int32(n))
 }
 
+// sendMessage wraps SendMessageW; the result may be a signed value
+// (e.g. LB_ERR = -1) sign-extended to pointer width.
+func sendMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
+	ret, _, _ := procSendMessageW.Call(hwnd, uintptr(msg), wParam, lParam)
+	return ret
+}
+
 func Run(projectList []projects.Project, version string, cfg *config.Config) {
 	allProjects = projectList
 	filteredProjects = projectList
@@ -565,17 +572,19 @@ func editSubclassProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr 
 			return 0
 		case VK_DOWN:
 			// Move selection down in listbox
-			count, _, _ := procSendMessageW.Call(listHwnd, LB_GETCOUNT, 0, 0)
-			cur, _, _ := procSendMessageW.Call(listHwnd, LB_GETCURSEL, 0, 0)
+			// LB_GETCURSEL returns LB_ERR (-1) when nothing is selected, so
+			// go through int: comparing raw uintptrs would underflow.
+			count := int(sendMessage(listHwnd, LB_GETCOUNT, 0, 0))
+			cur := int(sendMessage(listHwnd, LB_GETCURSEL, 0, 0))
 			if cur < count-1 {
-				procSendMessageW.Call(listHwnd, LB_SETCURSEL, cur+1, 0)
+				sendMessage(listHwnd, LB_SETCURSEL, uintptr(cur+1), 0)
 			}
 			return 0
 		case VK_UP:
 			// Move selection up in listbox
-			cur, _, _ := procSendMessageW.Call(listHwnd, LB_GETCURSEL, 0, 0)
+			cur := int(sendMessage(listHwnd, LB_GETCURSEL, 0, 0))
 			if cur > 0 {
-				procSendMessageW.Call(listHwnd, LB_SETCURSEL, cur-1, 0)
+				sendMessage(listHwnd, LB_SETCURSEL, uintptr(cur-1), 0)
 			}
 			return 0
 		case VK_RETURN:
@@ -1247,8 +1256,10 @@ func toggleSort() {
 }
 
 func onProjectSelected() {
-	sel, _, _ := procSendMessageW.Call(listHwnd, LB_GETCURSEL, 0, 0)
-	if sel == 0xFFFFFFFF || int(sel) >= len(filteredProjects) {
+	// LB_GETCURSEL returns LB_ERR (-1) when nothing is selected; as a
+	// uintptr that is sign-extended, so convert to int before comparing.
+	sel := int(sendMessage(listHwnd, LB_GETCURSEL, 0, 0))
+	if sel < 0 || sel >= len(filteredProjects) {
 		return
 	}
 
