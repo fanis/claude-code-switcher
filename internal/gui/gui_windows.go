@@ -605,7 +605,9 @@ func editSubclassProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr 
 
 // deleteWordBackward deletes the word before the cursor
 func deleteWordBackward(hwnd uintptr) {
-	// Get current text
+	// Get current text as UTF-16: EM_GETSEL positions are UTF-16 code
+	// units, so scanning the raw buffer keeps indices consistent
+	// (a Go string conversion would give byte offsets instead).
 	length, _, _ := procGetWindowTextLengthW.Call(hwnd)
 	if length == 0 {
 		return
@@ -613,7 +615,7 @@ func deleteWordBackward(hwnd uintptr) {
 
 	buf := make([]uint16, length+1)
 	procGetWindowTextW.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), length+1)
-	text := syscall.UTF16ToString(buf)
+	text := buf[:length]
 
 	// Get cursor position
 	var start, end uint32
@@ -623,12 +625,17 @@ func deleteWordBackward(hwnd uintptr) {
 		return
 	}
 
-	// Find word boundary (skip spaces, then skip non-spaces)
 	pos := int(start)
-	for pos > 0 && (text[pos-1] == ' ' || text[pos-1] == '\t') {
+	if pos > len(text) {
+		pos = len(text)
+	}
+
+	// Find word boundary (skip spaces, then skip non-spaces)
+	isSpace := func(c uint16) bool { return c == ' ' || c == '\t' }
+	for pos > 0 && isSpace(text[pos-1]) {
 		pos--
 	}
-	for pos > 0 && text[pos-1] != ' ' && text[pos-1] != '\t' {
+	for pos > 0 && !isSpace(text[pos-1]) {
 		pos--
 	}
 
