@@ -13,40 +13,40 @@ import (
 )
 
 var (
-	kernel32                  = syscall.NewLazyDLL("kernel32.dll")
-	procCreateToolhelp32Snapshot = kernel32.NewProc("CreateToolhelp32Snapshot")
-	procProcess32FirstW       = kernel32.NewProc("Process32FirstW")
-	procProcess32NextW        = kernel32.NewProc("Process32NextW")
-	procOpenProcess           = kernel32.NewProc("OpenProcess")
+	kernel32                       = syscall.NewLazyDLL("kernel32.dll")
+	procCreateToolhelp32Snapshot   = kernel32.NewProc("CreateToolhelp32Snapshot")
+	procProcess32FirstW            = kernel32.NewProc("Process32FirstW")
+	procProcess32NextW             = kernel32.NewProc("Process32NextW")
+	procOpenProcess                = kernel32.NewProc("OpenProcess")
 	procQueryFullProcessImageNameW = kernel32.NewProc("QueryFullProcessImageNameW")
-	procCloseHandle           = kernel32.NewProc("CloseHandle")
+	procCloseHandle                = kernel32.NewProc("CloseHandle")
 
-	psapi                     = syscall.NewLazyDLL("psapi.dll")
+	psapi                        = syscall.NewLazyDLL("psapi.dll")
 	procGetProcessImageFileNameW = psapi.NewProc("GetProcessImageFileNameW")
 
-	ntdll                     = syscall.NewLazyDLL("ntdll.dll")
+	ntdll                         = syscall.NewLazyDLL("ntdll.dll")
 	procNtQueryInformationProcess = ntdll.NewProc("NtQueryInformationProcess")
 )
 
 const (
-	TH32CS_SNAPPROCESS = 0x00000002
+	TH32CS_SNAPPROCESS                = 0x00000002
 	PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-	PROCESS_QUERY_INFORMATION = 0x0400
-	PROCESS_VM_READ = 0x0010
-	MAX_PATH = 260
+	PROCESS_QUERY_INFORMATION         = 0x0400
+	PROCESS_VM_READ                   = 0x0010
+	MAX_PATH                          = 260
 )
 
 type PROCESSENTRY32W struct {
-	Size              uint32
-	CntUsage          uint32
-	ProcessID         uint32
-	DefaultHeapID     uintptr
-	ModuleID          uint32
-	CntThreads        uint32
-	ParentProcessID   uint32
-	PriClassBase      int32
-	Flags             uint32
-	ExeFile           [MAX_PATH]uint16
+	Size            uint32
+	CntUsage        uint32
+	ProcessID       uint32
+	DefaultHeapID   uintptr
+	ModuleID        uint32
+	CntThreads      uint32
+	ParentProcessID uint32
+	PriClassBase    int32
+	Flags           uint32
+	ExeFile         [MAX_PATH]uint16
 }
 
 // ClaudeProcess represents a running Claude process

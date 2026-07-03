@@ -15,6 +15,13 @@ import (
 	"unsafe"
 )
 
+var (
+	shell32           = syscall.NewLazyDLL("shell32.dll")
+	user32            = syscall.NewLazyDLL("user32.dll")
+	procShellExecuteW = shell32.NewProc("ShellExecuteW")
+	procMessageBoxW   = user32.NewProc("MessageBoxW")
+)
+
 func utf16PtrFromString(s string) *uint16 {
 	p, _ := syscall.UTF16PtrFromString(s)
 	return p
@@ -217,15 +224,12 @@ func launchWithWezTerm(weztermPath, projectPath, claudePath string) error {
 
 // launchWithCmd launches plain cmd.exe as fallback
 func launchWithCmd(projectPath, claudePath string, otherWasFound bool) error {
-	shell32 := syscall.NewLazyDLL("shell32.dll")
-	shellExecute := shell32.NewProc("ShellExecuteW")
-
 	cmdPath := `C:\Windows\System32\cmd.exe`
 	args := `/k cd /d "` + projectPath + `" && "` + claudePath + `"`
 
 	logDebug("ShellExecute (cmd fallback): %s %s", cmdPath, args)
 
-	ret, _, err := shellExecute.Call(
+	ret, _, err := procShellExecuteW.Call(
 		0,
 		uintptr(unsafe.Pointer(utf16PtrFromString("open"))),
 		uintptr(unsafe.Pointer(utf16PtrFromString(cmdPath))),
@@ -333,33 +337,14 @@ func findClaude() string {
 
 // showErrorDialog shows an error message box
 func showErrorDialog(title, message string) {
-	user32 := syscall.NewLazyDLL("user32.dll")
-	messageBox := user32.NewProc("MessageBoxW")
-
 	const MB_OK = 0x00000000
 	const MB_ICONERROR = 0x00000010
 
-	messageBox.Call(
+	procMessageBoxW.Call(
 		parentHwnd,
 		uintptr(unsafe.Pointer(utf16PtrFromString(message))),
 		uintptr(unsafe.Pointer(utf16PtrFromString(title))),
 		MB_OK|MB_ICONERROR,
-	)
-}
-
-// showInfoDialog shows an info message box
-func showInfoDialog(title, message string) {
-	user32 := syscall.NewLazyDLL("user32.dll")
-	messageBox := user32.NewProc("MessageBoxW")
-
-	const MB_OK = 0x00000000
-	const MB_ICONINFORMATION = 0x00000040
-
-	messageBox.Call(
-		parentHwnd,
-		uintptr(unsafe.Pointer(utf16PtrFromString(message))),
-		uintptr(unsafe.Pointer(utf16PtrFromString(title))),
-		MB_OK|MB_ICONINFORMATION,
 	)
 }
 
@@ -379,25 +364,4 @@ func logDebug(format string, args ...interface{}) {
 
 	msg := fmt.Sprintf(format, args...)
 	f.WriteString(fmt.Sprintf("%s\n", msg))
-}
-
-// FocusWindow brings the window with the given HWND to the foreground
-func FocusWindow(hwnd uintptr) error {
-	if hwnd == 0 {
-		return nil
-	}
-
-	user32 := syscall.NewLazyDLL("user32.dll")
-	setForegroundWindow := user32.NewProc("SetForegroundWindow")
-	showWindow := user32.NewProc("ShowWindow")
-
-	const SW_RESTORE = 9
-
-	// Restore if minimized
-	showWindow.Call(hwnd, SW_RESTORE)
-
-	// Bring to foreground
-	setForegroundWindow.Call(hwnd)
-
-	return nil
 }

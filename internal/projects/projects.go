@@ -255,9 +255,6 @@ func decodePath(encoded string) string {
 	//   "c:\install\headlines\neutralizer" OR "c:\install\headlines-neutralizer"
 
 	parts := strings.Split(encoded, "--")
-	if len(parts) < 1 {
-		return ""
-	}
 
 	// Drive only case (e.g., "c")
 	if len(parts) == 1 {
@@ -355,14 +352,14 @@ func resolveSegments(basePath string, segments []string) string {
 
 // SortByLastUsed sorts projects by last used time (most recent first)
 func SortByLastUsed(projects []Project) {
-	sort.Slice(projects, func(i, j int) bool {
+	sort.SliceStable(projects, func(i, j int) bool {
 		return projects[i].LastUsed.After(projects[j].LastUsed)
 	})
 }
 
 // SortByName sorts projects alphabetically by name
 func SortByName(projects []Project) {
-	sort.Slice(projects, func(i, j int) bool {
+	sort.SliceStable(projects, func(i, j int) bool {
 		return strings.ToLower(projects[i].Name) < strings.ToLower(projects[j].Name)
 	})
 }

@@ -12,6 +12,9 @@ import (
 )
 
 func TestDecodePath(t *testing.T) {
+	// decodePath joins with filepath.Separator, so build expectations the
+	// same way to keep the test passing on non-Windows hosts too.
+	sep := string(filepath.Separator)
 	tests := []struct {
 		name     string
 		encoded  string
@@ -20,17 +23,17 @@ func TestDecodePath(t *testing.T) {
 		{
 			name:     "simple path",
 			encoded:  "c--work",
-			expected: "c:\\work",
+			expected: "c:" + sep + "work",
 		},
 		{
 			name:     "nested path with single dashes",
 			encoded:  "c--work-root-project",
-			expected: "c:\\work\\root\\project",
+			expected: "c:" + sep + "work" + sep + "root" + sep + "project",
 		},
 		{
 			name:     "user directory",
 			encoded:  "C--Users-micro",
-			expected: "C:\\Users\\micro",
+			expected: "C:" + sep + "Users" + sep + "micro",
 		},
 		{
 			name:     "empty string",

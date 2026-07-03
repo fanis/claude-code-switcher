@@ -92,8 +92,8 @@ func FilterAndScore(pattern string, items []string) []ScoredItem {
 		}
 	}
 
-	// Sort by score (highest first)
-	sort.Slice(results, func(i, j int) bool {
+	// Sort by score (highest first); stable so equal scores keep input order
+	sort.SliceStable(results, func(i, j int) bool {
 		return results[i].Score > results[j].Score
 	})
 

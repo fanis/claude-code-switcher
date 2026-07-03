@@ -84,19 +84,19 @@ const (
 
 	ES_AUTOHSCROLL = 0x0080
 
-	LBS_NOTIFY        = 0x0001
+	LBS_NOTIFY           = 0x0001
 	LBS_NOINTEGRALHEIGHT = 0x0100
-	LBS_OWNERDRAWFIXED = 0x0010
-	LBS_HASSTRINGS    = 0x0040
+	LBS_OWNERDRAWFIXED   = 0x0010
+	LBS_HASSTRINGS       = 0x0040
 
-	LB_ADDSTRING      = 0x0180
-	LB_RESETCONTENT   = 0x0184
-	LB_GETCURSEL      = 0x0188
-	LB_SETCURSEL      = 0x0186
-	LB_GETCOUNT       = 0x018B
-	LB_GETITEMDATA    = 0x0199
-	LB_SETITEMDATA    = 0x019A
-	LB_SETITEMHEIGHT  = 0x01A0
+	LB_ADDSTRING     = 0x0180
+	LB_RESETCONTENT  = 0x0184
+	LB_GETCURSEL     = 0x0188
+	LB_SETCURSEL     = 0x0186
+	LB_GETCOUNT      = 0x018B
+	LB_GETITEMDATA   = 0x0199
+	LB_SETITEMDATA   = 0x019A
+	LB_SETITEMHEIGHT = 0x01A0
 
 	WM_CREATE         = 0x0001
 	WM_DESTROY        = 0x0002
@@ -108,26 +108,26 @@ const (
 	WM_DRAWITEM       = 0x002B
 	WM_MEASUREITEM    = 0x002C
 	WM_ACTIVATE       = 0x0006
-	WM_GETMINMAXINFO    = 0x0024
-	WM_CTLCOLORSTATIC  = 0x0138
-	WM_APP             = 0x8000
-	WM_APP_UPDATE      = WM_APP + 1
+	WM_GETMINMAXINFO  = 0x0024
+	WM_CTLCOLORSTATIC = 0x0138
+	WM_APP            = 0x8000
+	WM_APP_UPDATE     = WM_APP + 1
 
 	WA_INACTIVE = 0
 
-	EN_CHANGE = 0x0300
+	EN_CHANGE  = 0x0300
 	LBN_DBLCLK = 2
 
-	VK_RETURN    = 0x0D
-	VK_ESCAPE    = 0x1B
-	VK_UP        = 0x26
-	VK_DOWN      = 0x28
-	VK_TAB       = 0x09
-	VK_BACK      = 0x08
-	VK_CONTROL   = 0x11
+	VK_RETURN  = 0x0D
+	VK_ESCAPE  = 0x1B
+	VK_UP      = 0x26
+	VK_DOWN    = 0x28
+	VK_TAB     = 0x09
+	VK_BACK    = 0x08
+	VK_CONTROL = 0x11
 
-	EM_SETSEL    = 0x00B1
-	EM_GETSEL    = 0x00B0
+	EM_SETSEL     = 0x00B1
+	EM_GETSEL     = 0x00B0
 	EM_REPLACESEL = 0x00C2
 
 	SW_SHOW = 5
@@ -144,12 +144,12 @@ const (
 	MB_ICONQUESTION = 0x00000020
 	IDYES           = 6
 
-	BM_GETCHECK      = 0x00F0
-	BM_SETCHECK      = 0x00F1
-	BST_CHECKED      = 1
-	BST_UNCHECKED    = 0
-	BS_AUTOCHECKBOX  = 0x0003
-	SS_ETCHEDHORZ    = 0x0010
+	BM_GETCHECK     = 0x00F0
+	BM_SETCHECK     = 0x00F1
+	BST_CHECKED     = 1
+	BST_UNCHECKED   = 0
+	BS_AUTOCHECKBOX = 0x0003
+	SS_ETCHEDHORZ   = 0x0010
 
 	CBS_DROPDOWNLIST = 0x0003
 	CBS_HASSTRINGS   = 0x0200
@@ -158,8 +158,8 @@ const (
 	CB_GETCURSEL     = 0x0147
 	CBN_SELCHANGE    = 1
 
-	COLOR_WINDOW     = 5
-	COLOR_HIGHLIGHT  = 13
+	COLOR_WINDOW        = 5
+	COLOR_HIGHLIGHT     = 13
 	COLOR_HIGHLIGHTTEXT = 14
 
 	DT_LEFT         = 0x0000
@@ -168,10 +168,10 @@ const (
 	DT_VCENTER      = 0x0004
 	DT_END_ELLIPSIS = 0x8000
 
-	ODT_LISTBOX   = 2
+	ODT_LISTBOX    = 2
 	ODA_DRAWENTIRE = 0x0001
-	ODA_SELECT    = 0x0002
-	ODS_SELECTED  = 0x0001
+	ODA_SELECT     = 0x0002
+	ODS_SELECTED   = 0x0001
 
 	ICC_LISTVIEW_CLASSES = 0x00000001
 )
@@ -230,9 +230,9 @@ type MEASUREITEMSTRUCT struct {
 }
 
 type MINMAXINFO struct {
-	Reserved    POINT
-	MaxSize     POINT
-	MaxPosition POINT
+	Reserved     POINT
+	MaxSize      POINT
+	MaxPosition  POINT
 	MinTrackSize POINT
 	MaxTrackSize POINT
 }
@@ -243,9 +243,9 @@ type INITCOMMONCONTROLSEX struct {
 }
 
 const (
-	IDC_EDIT    = 101
-	IDC_LISTBOX = 102
-	IDC_SORT    = 103
+	IDC_EDIT     = 101
+	IDC_LISTBOX  = 102
+	IDC_SORT     = 103
 	IDC_SETTINGS = 104
 )
 
@@ -741,16 +741,16 @@ func drawListItem(dis *DRAWITEMSTRUCT) {
 	// Modern color scheme (colors in BGR format for Windows)
 	var bgColor, textColor, secondaryColor uint32
 	if dis.ItemState&ODS_SELECTED != 0 {
-		bgColor = 0x00CC7A00       // Nice blue (#007ACC in RGB)
-		textColor = 0x00FFFFFF     // White
+		bgColor = 0x00CC7A00        // Nice blue (#007ACC in RGB)
+		textColor = 0x00FFFFFF      // White
 		secondaryColor = 0x00E0E0E0 // Light gray
 	} else if !proj.PathExists {
-		bgColor = 0x00F0F0F0       // Light gray background
-		textColor = 0x00808080     // Gray text
+		bgColor = 0x00F0F0F0        // Light gray background
+		textColor = 0x00808080      // Gray text
 		secondaryColor = 0x00A0A0A0 // Lighter gray
 	} else {
-		bgColor = 0x00FFFFFF       // White
-		textColor = 0x00202020     // Near black
+		bgColor = 0x00FFFFFF        // White
+		textColor = 0x00202020      // Near black
 		secondaryColor = 0x00808080 // Gray
 	}
 
