@@ -7,6 +7,7 @@ package gui
 
 import (
 	"fmt"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -263,7 +264,18 @@ var (
 	showingDialog    bool // Prevent close on focus loss while showing dialog
 	appVersion       string
 	appConfig        *config.Config
+
+	// configMu guards appConfig: the background update check goroutine
+	// mutates it concurrently with the UI thread.
+	configMu sync.Mutex
 )
+
+// saveConfig persists appConfig under configMu.
+func saveConfig() {
+	configMu.Lock()
+	defer configMu.Unlock()
+	config.Save(appConfig)
+}
 
 func utf16PtrFromString(s string) *uint16 {
 	p, _ := syscall.UTF16PtrFromString(s)
@@ -347,7 +359,7 @@ func Run(projectList []projects.Project, version string, cfg *config.Config) {
 		if result == IDYES {
 			appConfig.UpdateCheckEnabled = true
 		}
-		config.Save(appConfig)
+		saveConfig()
 	}
 
 	// Show pending update notification from a previous session
@@ -362,6 +374,8 @@ func Run(projectList []projects.Project, version string, cfg *config.Config) {
 			if err != nil || !update.IsNewer(appVersion, latest) {
 				return
 			}
+			configMu.Lock()
+			defer configMu.Unlock()
 			if latest == appConfig.DismissedVersion {
 				return
 			}
@@ -1144,7 +1158,7 @@ func settingsDlgProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 				checked, _, _ := procSendMessageW.Call(
 					getDlgItem(hwnd, IDC_SETTINGS_CHECK), BM_GETCHECK, 0, 0)
 				appConfig.UpdateCheckEnabled = checked == BST_CHECKED
-				config.Save(appConfig)
+				saveConfig()
 			}
 			return 0
 		case IDC_SETTINGS_TERMINAL:
@@ -1163,7 +1177,7 @@ func settingsDlgProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 					procShowWindow.Call(settingsCustomEditHwnd, SW_SHOW)
 					procSetFocus.Call(settingsCustomEditHwnd)
 				}
-				config.Save(appConfig)
+				saveConfig()
 			}
 			return 0
 		case IDC_SETTINGS_CUSTOM:
@@ -1173,7 +1187,7 @@ func settingsDlgProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 					getDlgItem(hwnd, IDC_SETTINGS_TERMINAL), CB_GETCURSEL, 0, 0)
 				if sel == 4 {
 					appConfig.Terminal = getWindowText(settingsCustomEditHwnd)
-					config.Save(appConfig)
+					saveConfig()
 				}
 			}
 			return 0
@@ -1209,6 +1223,7 @@ func getWindowText(hwnd uintptr) string {
 }
 
 func showUpdateNotification() {
+	configMu.Lock()
 	version := appConfig.PendingVersion
 	url := appConfig.PendingURL
 
@@ -1216,6 +1231,7 @@ func showUpdateNotification() {
 	appConfig.PendingVersion = ""
 	appConfig.PendingURL = ""
 	config.Save(appConfig)
+	configMu.Unlock()
 
 	result := showMessageBox(mainHwnd,
 		fmt.Sprintf("Version %s is available.\n\nOpen the download page?", version),
@@ -1234,8 +1250,10 @@ func showUpdateNotification() {
 		}()
 	} else {
 		// User dismissed - don't notify again for this version
+		configMu.Lock()
 		appConfig.DismissedVersion = version
 		config.Save(appConfig)
+		configMu.Unlock()
 	}
 }
 
