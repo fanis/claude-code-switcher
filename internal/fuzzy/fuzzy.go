@@ -16,18 +16,19 @@ func Match(pattern, text string) (bool, int) {
 		return true, 0
 	}
 
-	pattern = strings.ToLower(pattern)
-	text = strings.ToLower(text)
+	// Work on runes so multi-byte characters index correctly
+	patternRunes := []rune(strings.ToLower(pattern))
+	textRunes := []rune(strings.ToLower(text))
 
 	patternIdx := 0
 	score := 0
 	lastMatchIdx := -1
 	consecutiveBonus := 0
 
-	for i, char := range text {
-		if patternIdx < len(pattern) && char == rune(pattern[patternIdx]) {
+	for i, char := range textRunes {
+		if patternIdx < len(patternRunes) && char == patternRunes[patternIdx] {
 			// First character must match at a word boundary
-			if patternIdx == 0 && i > 0 && unicode.IsLetter(rune(text[i-1])) {
+			if patternIdx == 0 && i > 0 && unicode.IsLetter(textRunes[i-1]) {
 				continue
 			}
 
@@ -51,7 +52,7 @@ func Match(pattern, text string) (bool, int) {
 			}
 
 			// Bonus for matching at start of word
-			if i == 0 || !unicode.IsLetter(rune(text[i-1])) {
+			if i == 0 || !unicode.IsLetter(textRunes[i-1]) {
 				score += 15
 			}
 
@@ -65,7 +66,7 @@ func Match(pattern, text string) (bool, int) {
 	}
 
 	// All pattern characters must be found
-	if patternIdx < len(pattern) {
+	if patternIdx < len(patternRunes) {
 		return false, 0
 	}
 
