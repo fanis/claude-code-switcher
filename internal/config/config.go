@@ -73,6 +73,12 @@ func Save(cfg *Config) error {
 		return err
 	}
 
+	// Write to a temp file and rename so a crash mid-write can't corrupt
+	// the existing config.
 	path := filepath.Join(dir, "config.json")
-	return os.WriteFile(path, data, 0644)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
