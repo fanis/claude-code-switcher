@@ -465,8 +465,10 @@ func wndProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 		return 0
 
 	case WM_DESTROY:
-		if hFont != 0 {
-			procDeleteObject.Call(hFont)
+		for _, obj := range []uintptr{hFont, hFontBold, hFontSmall, hWhiteBrush} {
+			if obj != 0 {
+				procDeleteObject.Call(obj)
+			}
 		}
 		procPostQuitMessage.Call(0)
 		return 0
