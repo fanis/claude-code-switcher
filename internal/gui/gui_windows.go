@@ -1313,6 +1313,7 @@ func onProjectSelected() {
 	procEnableWindow.Call(editHwnd, 0)
 	procEnableWindow.Call(listHwnd, 0)
 	procEnableWindow.Call(sortBtnHwnd, 0)
+	procEnableWindow.Call(settingsBtnHwnd, 0)
 
 	// Open in Windows Terminal
 	// Set flag to prevent close on focus loss during terminal dialogs
@@ -1326,6 +1327,7 @@ func onProjectSelected() {
 		procEnableWindow.Call(editHwnd, 1)
 		procEnableWindow.Call(listHwnd, 1)
 		procEnableWindow.Call(sortBtnHwnd, 1)
+		procEnableWindow.Call(settingsBtnHwnd, 1)
 		showMessageBox(mainHwnd, "Failed to open terminal: "+err.Error(), "Error", 0)
 		return
 	}
