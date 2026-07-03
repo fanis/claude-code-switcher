@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -61,51 +62,69 @@ func LoadProjects() ([]Project, error) {
 		return nil, ErrNoProjects
 	}
 
-	var projects []Project
-	for _, entry := range entries {
+	// Scan project directories concurrently - each one does several stat/read
+	// calls, and a single slow path (e.g. a dead network drive) would otherwise
+	// stall the whole startup.
+	results := make([]*Project, len(entries))
+	var wg sync.WaitGroup
+	for i, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
+		wg.Add(1)
+		go func(i int, encodedName string) {
+			defer wg.Done()
+			results[i] = loadProject(projectsDir, encodedName)
+		}(i, entry.Name())
+	}
+	wg.Wait()
 
-		encodedName := entry.Name()
-		projectDir := filepath.Join(projectsDir, encodedName)
-		sessionsFile := filepath.Join(projectDir, "sessions-index.json")
-
-		// Try to get project path and last used time from sessions-index.json
-		projectPath, lastUsed, err := loadProjectInfo(sessionsFile)
-		if err != nil {
-			// Try reading cwd from a session .jsonl file
-			projectPath = extractCwdFromSessions(projectDir)
-			if projectPath == "" {
-				// Last resort: decode the path from directory name
-				projectPath = decodePath(encodedName)
-			}
-			if projectPath == "" {
-				continue
-			}
+	var projects []Project
+	for _, p := range results {
+		if p != nil {
+			projects = append(projects, *p)
 		}
-
-		// Always check .jsonl modtimes - sessions-index.json may be stale
-		if jsonlTime := latestJsonlModTime(projectDir); jsonlTime.After(lastUsed) {
-			lastUsed = jsonlTime
-		}
-
-		_, statErr := os.Stat(projectPath)
-		project := Project{
-			Name:       filepath.Base(projectPath),
-			Path:       projectPath,
-			EncodedDir: encodedName,
-			LastUsed:   lastUsed,
-			PathExists: statErr == nil,
-		}
-
-		projects = append(projects, project)
 	}
 
 	// Sort by last used (most recent first) by default
 	SortByLastUsed(projects)
 
 	return projects, nil
+}
+
+// loadProject resolves a single encoded project directory into a Project.
+// Returns nil if no project path could be determined.
+func loadProject(projectsDir, encodedName string) *Project {
+	projectDir := filepath.Join(projectsDir, encodedName)
+	sessionsFile := filepath.Join(projectDir, "sessions-index.json")
+
+	// Try to get project path and last used time from sessions-index.json
+	projectPath, lastUsed, err := loadProjectInfo(sessionsFile)
+	if err != nil {
+		// Try reading cwd from a session .jsonl file
+		projectPath = extractCwdFromSessions(projectDir)
+		if projectPath == "" {
+			// Last resort: decode the path from directory name
+			projectPath = decodePath(encodedName)
+		}
+		if projectPath == "" {
+			return nil
+		}
+	}
+
+	// Always check .jsonl modtimes - sessions-index.json may be stale
+	if jsonlTime := latestJsonlModTime(projectDir); jsonlTime.After(lastUsed) {
+		lastUsed = jsonlTime
+	}
+
+	_, statErr := os.Stat(projectPath)
+	return &Project{
+		Name:       filepath.Base(projectPath),
+		Path:       projectPath,
+		EncodedDir: encodedName,
+		LastUsed:   lastUsed,
+		PathExists: statErr == nil,
+	}
 }
 
 // loadProjectInfo reads sessions-index.json and returns the project path and last used time

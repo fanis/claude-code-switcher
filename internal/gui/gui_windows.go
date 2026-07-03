@@ -24,6 +24,7 @@ var (
 	kernel32 = syscall.NewLazyDLL("kernel32.dll")
 	gdi32    = syscall.NewLazyDLL("gdi32.dll")
 	comctl32 = syscall.NewLazyDLL("comctl32.dll")
+	shell32  = syscall.NewLazyDLL("shell32.dll")
 
 	procRegisterClassExW     = user32.NewProc("RegisterClassExW")
 	procCreateWindowExW      = user32.NewProc("CreateWindowExW")
@@ -58,6 +59,13 @@ var (
 	procPostMessageW         = user32.NewProc("PostMessageW")
 	procEnableWindow         = user32.NewProc("EnableWindow")
 	procIsDialogMessageW     = user32.NewProc("IsDialogMessageW")
+	procClientToScreen       = user32.NewProc("ClientToScreen")
+	procFillRect             = user32.NewProc("FillRect")
+	procDrawTextW            = user32.NewProc("DrawTextW")
+	procSetBkColor           = gdi32.NewProc("SetBkColor")
+	procSetTextColor         = gdi32.NewProc("SetTextColor")
+	procCreateSolidBrush     = gdi32.NewProc("CreateSolidBrush")
+	procShellExecuteW        = shell32.NewProc("ShellExecuteW")
 )
 
 const (
@@ -260,6 +268,7 @@ var (
 
 	allProjects      []projects.Project
 	filteredProjects []projects.Project
+	searchNames      []string // "name path" per project, parallel to allProjects
 	sortByName       bool
 	showingDialog    bool // Prevent close on focus loss while showing dialog
 	appVersion       string
@@ -297,6 +306,7 @@ func sendMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 func Run(projectList []projects.Project, version string, cfg *config.Config) {
 	allProjects = projectList
 	filteredProjects = projectList
+	rebuildSearchNames()
 	appVersion = version
 	appConfig = cfg
 
@@ -815,6 +825,16 @@ func formatLastUsed(t time.Time) string {
 	}
 }
 
+// rebuildSearchNames refreshes the cached search strings. Must be called
+// whenever allProjects is reordered, since fuzzy match indices map back
+// into allProjects by position.
+func rebuildSearchNames() {
+	searchNames = make([]string, len(allProjects))
+	for i, p := range allProjects {
+		searchNames[i] = p.Name + " " + p.Path
+	}
+}
+
 func onSearchChanged() {
 	// Get search text
 	length, _, _ := procGetWindowTextLengthW.Call(editHwnd)
@@ -828,15 +848,10 @@ func onSearchChanged() {
 	procGetWindowTextW.Call(editHwnd, uintptr(unsafe.Pointer(&buf[0])), length+1)
 	searchText := syscall.UTF16ToString(buf)
 
-	// Fuzzy filter
-	var names []string
-	for _, p := range allProjects {
-		names = append(names, p.Name+" "+p.Path)
-	}
+	// Fuzzy filter against the cached search strings
+	scored := fuzzy.FilterAndScore(searchText, searchNames)
 
-	scored := fuzzy.FilterAndScore(searchText, names)
-
-	filteredProjects = nil
+	filteredProjects = make([]projects.Project, 0, len(scored))
 	for _, item := range scored {
 		filteredProjects = append(filteredProjects, allProjects[item.Index])
 	}
@@ -893,8 +908,7 @@ func showSettingsDialog() {
 	var pt POINT
 	pt.X = mainRect.Left
 	pt.Y = mainRect.Top
-	clientToScreen := user32.NewProc("ClientToScreen")
-	clientToScreen.Call(mainHwnd, uintptr(unsafe.Pointer(&pt)))
+	procClientToScreen.Call(mainHwnd, uintptr(unsafe.Pointer(&pt)))
 
 	dpiScale := func(base int) int {
 		return (base * int(currentDPI)) / 96
@@ -1260,10 +1274,7 @@ func showUpdateNotification() {
 }
 
 func openURL(url string) {
-	shell32 := syscall.NewLazyDLL("shell32.dll")
-	shellExecute := shell32.NewProc("ShellExecuteW")
-
-	shellExecute.Call(
+	procShellExecuteW.Call(
 		0,
 		uintptr(unsafe.Pointer(utf16PtrFromString("open"))),
 		uintptr(unsafe.Pointer(utf16PtrFromString(url))),
@@ -1285,6 +1296,7 @@ func toggleSort() {
 		projects.SortByLastUsed(allProjects)
 		projects.SortByLastUsed(filteredProjects)
 	}
+	rebuildSearchNames()
 
 	populateList()
 }
@@ -1337,23 +1349,19 @@ func onProjectSelected() {
 
 // Win32 helper functions
 func setBkColor(hdc syscall.Handle, color uint32) {
-	procSetBkColor := gdi32.NewProc("SetBkColor")
 	procSetBkColor.Call(uintptr(hdc), uintptr(color))
 }
 
 func setTextColor(hdc syscall.Handle, color uint32) {
-	procSetTextColor := gdi32.NewProc("SetTextColor")
 	procSetTextColor.Call(uintptr(hdc), uintptr(color))
 }
 
 func createSolidBrush(color uint32) syscall.Handle {
-	procCreateSolidBrush := gdi32.NewProc("CreateSolidBrush")
 	ret, _, _ := procCreateSolidBrush.Call(uintptr(color))
 	return syscall.Handle(ret)
 }
 
 func fillRect(hdc syscall.Handle, rect *RECT, brush syscall.Handle) {
-	procFillRect := user32.NewProc("FillRect")
 	procFillRect.Call(uintptr(hdc), uintptr(unsafe.Pointer(rect)), uintptr(brush))
 }
 
@@ -1362,7 +1370,6 @@ func deleteObject(obj syscall.Handle) {
 }
 
 func drawText(hdc syscall.Handle, text string, rect *RECT, format uint32) {
-	procDrawTextW := user32.NewProc("DrawTextW")
 	textPtr := utf16PtrFromString(text)
 	procDrawTextW.Call(uintptr(hdc), uintptr(unsafe.Pointer(textPtr)), negInt(-1), uintptr(unsafe.Pointer(rect)), uintptr(format))
 }
