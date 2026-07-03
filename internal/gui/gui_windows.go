@@ -824,6 +824,7 @@ func onSearchChanged() {
 var settingsDlgHwnd uintptr
 var settingsCustomEditHwnd uintptr
 var settingsCustomLabelHwnd uintptr
+var settingsClassRegistered bool
 
 const (
 	WS_POPUP   = 0x80000000
@@ -848,14 +849,20 @@ func showSettingsDialog() {
 	hInstance, _, _ := procGetModuleHandleW.Call(0)
 
 	className := utf16PtrFromString("ClaudeSettingsDialog")
-	wc := WNDCLASSEXW{
-		Size:       uint32(unsafe.Sizeof(WNDCLASSEXW{})),
-		WndProc:    syscall.NewCallback(settingsDlgProc),
-		Instance:   syscall.Handle(hInstance),
-		ClassName:  className,
-		Background: syscall.Handle(COLOR_WINDOW + 1),
+	// Register the class (and its NewCallback) only once: Go callbacks are
+	// never released and their total count is limited, so allocating one per
+	// dialog open would eventually panic.
+	if !settingsClassRegistered {
+		wc := WNDCLASSEXW{
+			Size:       uint32(unsafe.Sizeof(WNDCLASSEXW{})),
+			WndProc:    syscall.NewCallback(settingsDlgProc),
+			Instance:   syscall.Handle(hInstance),
+			ClassName:  className,
+			Background: syscall.Handle(COLOR_WINDOW + 1),
+		}
+		procRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))
+		settingsClassRegistered = true
 	}
-	procRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))
 
 	// Center on main window
 	var mainRect RECT
