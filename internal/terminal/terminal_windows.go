@@ -13,12 +13,9 @@ import (
 	"strings"
 	"syscall"
 	"unsafe"
-)
 
-func utf16PtrFromString(s string) *uint16 {
-	p, _ := syscall.UTF16PtrFromString(s)
-	return p
-}
+	"github.com/fanis/claude-code-switcher/internal/win32"
+)
 
 // parentHwnd is the owner window for message boxes, set via SetParentHwnd
 var parentHwnd uintptr
@@ -227,9 +224,9 @@ func launchWithCmd(projectPath, claudePath string, otherWasFound bool) error {
 
 	ret, _, err := shellExecute.Call(
 		0,
-		uintptr(unsafe.Pointer(utf16PtrFromString("open"))),
-		uintptr(unsafe.Pointer(utf16PtrFromString(cmdPath))),
-		uintptr(unsafe.Pointer(utf16PtrFromString(args))),
+		uintptr(unsafe.Pointer(win32.UTF16Ptr("open"))),
+		uintptr(unsafe.Pointer(win32.UTF16Ptr(cmdPath))),
+		uintptr(unsafe.Pointer(win32.UTF16Ptr(args))),
 		0,
 		1, // SW_SHOWNORMAL
 	)
@@ -333,34 +330,7 @@ func findClaude() string {
 
 // showErrorDialog shows an error message box
 func showErrorDialog(title, message string) {
-	user32 := syscall.NewLazyDLL("user32.dll")
-	messageBox := user32.NewProc("MessageBoxW")
-
-	const MB_OK = 0x00000000
-	const MB_ICONERROR = 0x00000010
-
-	messageBox.Call(
-		parentHwnd,
-		uintptr(unsafe.Pointer(utf16PtrFromString(message))),
-		uintptr(unsafe.Pointer(utf16PtrFromString(title))),
-		MB_OK|MB_ICONERROR,
-	)
-}
-
-// showInfoDialog shows an info message box
-func showInfoDialog(title, message string) {
-	user32 := syscall.NewLazyDLL("user32.dll")
-	messageBox := user32.NewProc("MessageBoxW")
-
-	const MB_OK = 0x00000000
-	const MB_ICONINFORMATION = 0x00000040
-
-	messageBox.Call(
-		parentHwnd,
-		uintptr(unsafe.Pointer(utf16PtrFromString(message))),
-		uintptr(unsafe.Pointer(utf16PtrFromString(title))),
-		MB_OK|MB_ICONINFORMATION,
-	)
+	win32.MessageBox(parentHwnd, message, title, win32.MB_OK|win32.MB_ICONERROR)
 }
 
 func logDebug(format string, args ...interface{}) {

@@ -236,9 +236,6 @@ func decodePath(encoded string) string {
 	//   "c:\install\headlines\neutralizer" OR "c:\install\headlines-neutralizer"
 
 	parts := strings.Split(encoded, "--")
-	if len(parts) < 1 {
-		return ""
-	}
 
 	// Drive only case (e.g., "c")
 	if len(parts) == 1 {
@@ -282,16 +279,31 @@ func findValidPath(drive, pathPart string) string {
 		return ""
 	}
 
-	return resolveSegments(drive, segments)
+	// The recursive search is exponential in the worst case, so cap the
+	// number of filesystem probes. If the budget runs out, decodePath's
+	// simple dash-to-separator fallback still applies.
+	budget := 2048
+	return resolveSegments(drive, segments, &budget)
+}
+
+// statExists reports whether path exists, consuming one unit of budget.
+// Returns false without probing once the budget is exhausted.
+func statExists(path string, budget *int) bool {
+	if *budget <= 0 {
+		return false
+	}
+	*budget--
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // resolveSegments recursively resolves path segments by trying different
 // joiners (path separator, hyphen, dot) at each level, validating against
 // the filesystem at each step.
-func resolveSegments(basePath string, segments []string) string {
+func resolveSegments(basePath string, segments []string, budget *int) string {
 	if len(segments) == 0 {
 		// All segments consumed - check if this path exists
-		if _, err := os.Stat(basePath); err == nil {
+		if statExists(basePath, budget) {
 			return basePath
 		}
 		return ""
@@ -318,12 +330,12 @@ func resolveSegments(basePath string, segments []string) string {
 
 		for _, name := range names {
 			candidate := basePath + string(filepath.Separator) + name
-			if _, err := os.Stat(candidate); err == nil {
+			if statExists(candidate, budget) {
 				if len(rest) == 0 {
 					return candidate
 				}
 				// This level exists, recurse for remaining segments
-				result := resolveSegments(candidate, rest)
+				result := resolveSegments(candidate, rest, budget)
 				if result != "" {
 					return result
 				}

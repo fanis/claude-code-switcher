@@ -1,6 +1,10 @@
 // Copyright (c) 2025 Fanis Hatzidakis
 // Licensed under PolyForm Internal Use License 1.0.0 - see LICENSE.md
 
+// decodePath produces OS-native separators, so the expected values here are
+// Windows paths; the app itself is Windows-only.
+//go:build windows
+
 package projects
 
 import (

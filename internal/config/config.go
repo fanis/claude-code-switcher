@@ -53,6 +53,9 @@ func Load() (*Config, error) {
 
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
+		// Keep the unreadable file for inspection instead of silently
+		// overwriting it on the next Save.
+		os.Rename(path, path+".corrupt")
 		return &Config{}, nil
 	}
 	return &cfg, nil
@@ -73,6 +76,12 @@ func Save(cfg *Config) error {
 		return err
 	}
 
+	// Write to a temp file and rename so a crash mid-write can't leave a
+	// truncated config behind.
 	path := filepath.Join(dir, "config.json")
-	return os.WriteFile(path, data, 0644)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }

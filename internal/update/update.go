@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/fanis/claude-code-switcher/internal/config"
 )
 
 type releaseResponse struct {
@@ -74,19 +72,4 @@ func parseVersion(v string) []int {
 		nums[i] = n
 	}
 	return nums
-}
-
-// ShouldNotify returns true if the user should be shown an update notification.
-func ShouldNotify(cfg *config.Config, latestVersion string) bool {
-	if !cfg.UpdateCheckEnabled {
-		return false
-	}
-	if latestVersion == cfg.DismissedVersion {
-		return false
-	}
-	today := time.Now().Format("2006-01-02")
-	if cfg.LastCheckDate == today {
-		return false
-	}
-	return true
 }
