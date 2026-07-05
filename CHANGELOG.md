@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `Cut Release` GitHub Actions workflow: cut a full release from the GitHub web UI (tests, version stamping in `main.go`/`README.md`/`CHANGELOG.md`, release commit, tag, push) mirroring the workstation procedure
+
 ### Fixed
 - Crash when pressing Enter while the search matched no projects (LB_ERR from `LB_GETCURSEL` was not detected on 64-bit)
 - Fuzzy search now matches non-ASCII project names correctly (rune-based matching instead of byte-based)

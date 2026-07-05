@@ -105,13 +105,15 @@ Claude's path encoding converts both path separators (`\`) and dots (`.`) to hyp
 See [DEPLOY.md](DEPLOY.md) for full procedure. Summary:
 
 1. Update `CHANGELOG.md` with new version and changes
-2. Update version in `README.md`
+2. Update version in `README.md` and `main.go` (`appVersion`)
 3. Commit changes
 4. Commit "Release X.Y.Z"
 5. Tag with `X.Y.Z` (no `v` prefix - required for GitHub Actions)
 6. Push commits and tag
 
 Tag format must be `X.Y.Z` (e.g., `0.1.1`) to trigger the release workflow.
+
+Alternatively run the `Cut Release` workflow (`cut-release.yml`) from the GitHub Actions web UI with the new version as input: it tests, stamps the version into all three files (renaming the `## [Unreleased]` changelog section, which must be populated), commits, tags, and pushes from `master`. It pushes with the `WINGET_TOKEN` PAT because tags pushed with the default `GITHUB_TOKEN` don't trigger the release workflow.
 
 ### Chocolatey package
 
