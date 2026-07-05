@@ -134,6 +134,7 @@ Set `CLAUDE_SWITCHER_DEBUG=1` environment variable to enable debug logging to `~
 
 ## Workflow
 
+- Never attribute Claude in commits or PRs: no `Co-Authored-By: Claude`, no "Generated with Claude Code" footers, no session links - in commit messages, PR titles, or PR bodies
 - Before committing/pushing, always update docs (CLAUDE.md, CHANGELOG.md, README.md) first
 - Always show the full diff for review before pushing
 - Version lives in three places: `main.go` (appVersion const), `README.md` (badge), `CHANGELOG.md` (new section)
