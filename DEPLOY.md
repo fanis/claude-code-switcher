@@ -1,5 +1,17 @@
 # Deployment Procedure
 
+## Cutting a Release from the GitHub Web UI
+
+The `Cut Release` workflow (`cut-release.yml`) performs the whole procedure below without a workstation. Run it from Actions -> Cut Release -> Run workflow, entering the new version (e.g. `0.3.2`, no `v` prefix).
+
+It replicates the workstation steps: builds and runs the tests on a Windows runner, stamps the version into `main.go`, `README.md`, and `CHANGELOG.md`, commits `Release X.Y.Z`, tags `X.Y.Z`, and pushes to `master` — which triggers the normal `Release` workflow chain.
+
+Prerequisites:
+
+- `CHANGELOG.md` must have a populated `## [Unreleased]` section on `master`; the workflow renames it to `## [X.Y.Z] - date` and uses it as the release notes. Keep release notes accumulating there as changes land.
+- The `WINGET_TOKEN` secret must be set. The workflow pushes the tag with this PAT because tags pushed with the default `GITHUB_TOKEN` do not trigger other workflows (the `Release` workflow would never run).
+- The workflow always releases from `master`, regardless of which ref it is dispatched on.
+
 ## Release Checklist
 
 Before releasing a new version:
@@ -43,7 +55,15 @@ Update the version number in the badge line:
 > **Latest Version**: X.Y.Z | [See What's New](CHANGELOG.md)
 ```
 
-### 3. Commit and Tag
+### 3. Update main.go
+
+Update the `appVersion` constant:
+
+```go
+const appVersion = "X.Y.Z"
+```
+
+### 4. Commit and Tag
 
 ```bash
 # Stage and commit your changes (if not already committed)
@@ -51,7 +71,7 @@ git add .
 git commit -m "Description of changes"
 
 # Commit the version bump
-git add CHANGELOG.md README.md
+git add CHANGELOG.md README.md main.go
 git commit -m "Release X.Y.Z"
 
 # Create the tag (NO 'v' prefix - required for GitHub Actions)
@@ -96,5 +116,5 @@ After pushing the tag:
 
 | Secret | Source | Purpose |
 |---|---|---|
-| `WINGET_TOKEN` | [GitHub PAT](https://github.com/settings/tokens/new) with `public_repo` scope | winget-releaser action pushes manifest PRs to microsoft/winget-pkgs |
+| `WINGET_TOKEN` | [GitHub PAT](https://github.com/settings/tokens/new) with `public_repo` scope | winget-releaser action pushes manifest PRs to microsoft/winget-pkgs; also used by `Cut Release` to push the release commit and tag so the tag triggers the `Release` workflow |
 | `CHOCO_API_KEY` | [Chocolatey account](https://community.chocolatey.org/account) API key | choco push to chocolatey.org |

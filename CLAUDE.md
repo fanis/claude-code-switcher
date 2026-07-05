@@ -24,21 +24,24 @@ Windows-only native GUI application written in Go. Reads Claude Code project dat
 
 - `main.go` - Entry point: locks OS thread (`runtime.LockOSThread`), loads projects, runs GUI
 - `internal/projects/` - Reads `~/.claude/projects/*/sessions-index.json`, extracts cwd from session `.jsonl` files, or decodes paths from encoded directory names (e.g., `c--work-project` -> `c:\work\project`). Validates path existence on disk. "Last used" comes from session `modified` field (sessions-index.json) or `.jsonl` file modtime (fallback) - never use directory modtime (unreliable, changed by Claude housekeeping).
-- `internal/gui/` - Native Win32 GUI via syscall (user32, gdi32, kernel32, comctl32). Owner-drawn listbox with custom item rendering. Subclasses edit control for keyboard navigation (arrows/Enter/Escape)
-- `internal/fuzzy/` - Fuzzy string matching with scoring (consecutive bonus, word boundary bonus, start-of-text bonus)
+- `internal/gui/` - Native Win32 GUI via syscall (user32, gdi32, kernel32, comctl32). Split into `gui_windows.go` (state, Run, wndProc), `controls_windows.go` (control creation/layout/keyboard/search/launch), `draw_windows.go` (owner-drawn list items), `settings_windows.go` (settings dialog), `updatecheck_windows.go` (update check flow), `win32_windows.go` (procs/consts/structs/helpers). Owner-drawn listbox with custom item rendering. Subclasses edit control for keyboard navigation (arrows/Enter/Escape)
+- `internal/fuzzy/` - Fuzzy string matching with scoring (consecutive bonus, word boundary bonus, start-of-text bonus). Operates on runes so non-ASCII names match correctly
 - `internal/terminal/` - Configurable terminal launching. Supports Windows Terminal, WezTerm, cmd.exe, and custom commands. Auto-detect mode tries wt -> wezterm -> cmd. Custom commands support `{dir}` and `{claude}` placeholders
-- `internal/config/` - JSON config persistence at `~/.claude-code-switcher/config.json` (update check preferences, pending version state, terminal selection)
-- `internal/update/` - Lightweight GitHub Releases API check, semver comparison, notification dedup logic (max once/day, dismissed versions tracked)
-- `internal/process/` - Process enumeration via Toolhelp32 (currently unused, kept for future "active project" detection)
+- `internal/config/` - JSON config persistence at `~/.claude-code-switcher/config.json` (update check preferences, pending version state, terminal selection). Saves atomically (temp file + rename); a corrupt config is renamed to `config.json.corrupt` instead of being overwritten
+- `internal/update/` - Lightweight GitHub Releases API check, semver comparison (once/day scheduling and dismissed-version tracking live in `internal/gui/updatecheck_windows.go`)
+- `internal/win32/` - Shared Win32 helpers (`UTF16Ptr`, `MessageBox` + MB_* constants) used by main, gui, and terminal
 
 ### Key Patterns
 
-- All `*_windows.go` files use `//go:build windows` tag
-- Win32 API calls via syscall.NewLazyDLL/NewProc pattern
+- All `*_windows.go` files use `//go:build windows` tag. `internal/projects` tests are also Windows-only (`decodePath` produces OS-native separators), so `go test ./...` only exercises them on Windows
+- Win32 API calls via syscall.NewLazyDLL/NewProc pattern. Declare procs once at package level - never call `NewProc` inside a function that runs per-paint or per-event
 - GUI uses message pump with GetMessageW/TranslateMessage/DispatchMessageW loop
 - `runtime.LockOSThread()` in main - required for Win32 GUI, prevents Go from rescheduling the goroutine to a different OS thread
+- `syscall.NewCallback` allocations are permanent (Go caps the total); create window-proc callbacks once (see `settingsClassOnce`), never per dialog open
+- `appConfig` is shared with the background update-check goroutine: mutate and save it only via `saveConfig`/`configMu`. `showingDialog` is an `atomic.Bool` for the same reason
+- `SendMessageW` results are `uintptr`; LB_ERR/CB_ERR (-1) comes back as all-ones, so convert with `int(ret)` and check `< 0` before using it as an index (see `onProjectSelected`)
 - Project paths encoded as `<drive>--<path-segments-with-dashes>` in Claude's data directory
-- Always use `utf16PtrFromString` wrapper for Win32 string args, never `syscall.StringToUTF16Ptr` (deprecated, silently truncates at embedded nulls)
+- Always use `win32.UTF16Ptr` (or a package-local wrapper over it) for Win32 string args, never `syscall.StringToUTF16Ptr` (deprecated, silently truncates at embedded nulls)
 - `DrawTextW` length param: pass `-1` for null-terminated strings, never `len(text)` (byte count, wrong for non-ASCII)
 - Paths interpolated into ShellExecute args must be validated (reject `"` chars) to prevent command injection
 - `go vet` warns "possible misuse of unsafe.Pointer" on Win32 lParam casts (DRAWITEMSTRUCT, MEASUREITEMSTRUCT) - this is expected and unavoidable
@@ -102,13 +105,15 @@ Claude's path encoding converts both path separators (`\`) and dots (`.`) to hyp
 See [DEPLOY.md](DEPLOY.md) for full procedure. Summary:
 
 1. Update `CHANGELOG.md` with new version and changes
-2. Update version in `README.md`
+2. Update version in `README.md` and `main.go` (`appVersion`)
 3. Commit changes
 4. Commit "Release X.Y.Z"
 5. Tag with `X.Y.Z` (no `v` prefix - required for GitHub Actions)
 6. Push commits and tag
 
 Tag format must be `X.Y.Z` (e.g., `0.1.1`) to trigger the release workflow.
+
+Alternatively run the `Cut Release` workflow (`cut-release.yml`) from the GitHub Actions web UI with the new version as input: it tests, stamps the version into all three files (renaming the `## [Unreleased]` changelog section, which must be populated), commits, tags, and pushes from `master`. It pushes with the `WINGET_TOKEN` PAT because tags pushed with the default `GITHUB_TOKEN` don't trigger the release workflow.
 
 ### Chocolatey package
 

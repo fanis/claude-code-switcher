@@ -9,66 +9,66 @@ import (
 
 func TestMatch(t *testing.T) {
 	tests := []struct {
-		name        string
-		pattern     string
-		text        string
-		wantMatch   bool
+		name         string
+		pattern      string
+		text         string
+		wantMatch    bool
 		wantMinScore int
 	}{
 		{
-			name:        "empty pattern matches anything",
-			pattern:     "",
-			text:        "anything",
-			wantMatch:   true,
+			name:         "empty pattern matches anything",
+			pattern:      "",
+			text:         "anything",
+			wantMatch:    true,
 			wantMinScore: 0,
 		},
 		{
-			name:        "exact match",
-			pattern:     "test",
-			text:        "test",
-			wantMatch:   true,
+			name:         "exact match",
+			pattern:      "test",
+			text:         "test",
+			wantMatch:    true,
 			wantMinScore: 40,
 		},
 		{
-			name:        "prefix match",
-			pattern:     "tes",
-			text:        "testing",
-			wantMatch:   true,
+			name:         "prefix match",
+			pattern:      "tes",
+			text:         "testing",
+			wantMatch:    true,
 			wantMinScore: 30,
 		},
 		{
-			name:        "fuzzy match with gaps",
-			pattern:     "tst",
-			text:        "testing",
-			wantMatch:   true,
+			name:         "fuzzy match with gaps",
+			pattern:      "tst",
+			text:         "testing",
+			wantMatch:    true,
 			wantMinScore: 20,
 		},
 		{
-			name:        "case insensitive",
-			pattern:     "TEST",
-			text:        "testing",
-			wantMatch:   true,
+			name:         "case insensitive",
+			pattern:      "TEST",
+			text:         "testing",
+			wantMatch:    true,
 			wantMinScore: 20,
 		},
 		{
-			name:        "no match",
-			pattern:     "xyz",
-			text:        "testing",
-			wantMatch:   false,
+			name:         "no match",
+			pattern:      "xyz",
+			text:         "testing",
+			wantMatch:    false,
 			wantMinScore: 0,
 		},
 		{
-			name:        "partial pattern not found",
-			pattern:     "testx",
-			text:        "testing",
-			wantMatch:   false,
+			name:         "partial pattern not found",
+			pattern:      "testx",
+			text:         "testing",
+			wantMatch:    false,
 			wantMinScore: 0,
 		},
 		{
-			name:        "word boundary bonus",
-			pattern:     "cc",
-			text:        "claude-code",
-			wantMatch:   true,
+			name:         "word boundary bonus",
+			pattern:      "cc",
+			text:         "claude-code",
+			wantMatch:    true,
 			wantMinScore: 30,
 		},
 	}
@@ -95,10 +95,10 @@ func TestFilterAndScore(t *testing.T) {
 	}
 
 	tests := []struct {
-		name       string
-		pattern    string
-		wantCount  int
-		wantFirst  string
+		name      string
+		pattern   string
+		wantCount int
+		wantFirst string
 	}{
 		{
 			name:      "empty pattern returns all",

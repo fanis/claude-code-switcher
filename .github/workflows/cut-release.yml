@@ -1,0 +1,121 @@
+name: Cut Release
+
+# Replicates the workstation release procedure (DEPLOY.md) from the GitHub
+# web UI: verifies the build and tests, stamps the version into main.go,
+# README.md, and CHANGELOG.md (the [Unreleased] section becomes the new
+# version's section), commits "Release X.Y.Z", tags X.Y.Z, and pushes.
+# The tag push then triggers the normal Release workflow chain
+# (release.yml -> winget.yml/scoop.yml) exactly as a workstation push would.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: New version to release, for example 0.3.2 (no v prefix)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+# Never run two release cuts at once
+concurrency: cut-release
+
+jobs:
+  cut-release:
+    # windows-latest so `go test ./...` actually exercises the
+    # windows-only test suites, matching the workstation checklist
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # Releases are always cut from master, whatever ref the
+          # workflow was dispatched on
+          ref: master
+          # Full history so existing tags are visible to the checks below
+          fetch-depth: 0
+          # Tags pushed with the default GITHUB_TOKEN do NOT trigger other
+          # workflows, so release.yml would never run. Check out (and later
+          # push) with the WINGET_TOKEN PAT instead.
+          token: ${{ secrets.WINGET_TOKEN }}
+
+      - name: Validate version and changelog
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
+
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version must be X.Y.Z with no v prefix, got '$VERSION'"
+            exit 1
+          fi
+
+          if git rev-parse -q --verify "refs/tags/$VERSION" > /dev/null; then
+            echo "::error::Tag $VERSION already exists"
+            exit 1
+          fi
+
+          CURRENT=$(sed -n 's/^const appVersion = "\(.*\)"$/\1/p' main.go)
+          HIGHEST=$(printf '%s\n%s\n' "$CURRENT" "$VERSION" | sort -V | tail -1)
+          if [ "$VERSION" = "$CURRENT" ] || [ "$HIGHEST" != "$VERSION" ]; then
+            echo "::error::Version $VERSION must be greater than the current version $CURRENT"
+            exit 1
+          fi
+
+          # The [Unreleased] changelog section becomes this release's notes,
+          # so it must exist and have content
+          NOTES=$(awk '/^## \[Unreleased\]/{found=1; next} /^## \[/{exit} found' CHANGELOG.md | grep -v '^[[:space:]]*$' || true)
+          if [ -z "$NOTES" ]; then
+            echo "::error::CHANGELOG.md has no populated [Unreleased] section - nothing to release"
+            exit 1
+          fi
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build and test (release checklist)
+        shell: bash
+        run: |
+          go build -o claude-code-switcher.exe -ldflags="-H windowsgui" .
+          go test ./...
+
+      - name: Bump version in main.go, README.md, CHANGELOG.md
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
+          TODAY=$(date +%Y-%m-%d)
+
+          sed -i "s/^const appVersion = \".*\"$/const appVersion = \"$VERSION\"/" main.go
+          sed -i "s/^> \*\*Latest Version\*\*: [0-9][0-9.]*/> **Latest Version**: $VERSION/" README.md
+          sed -i "s/^## \[Unreleased\]$/## [$VERSION] - $TODAY/" CHANGELOG.md
+
+          # Fail loudly if any replacement did not land
+          grep -qF "const appVersion = \"$VERSION\"" main.go
+          grep -qF "**Latest Version**: $VERSION |" README.md
+          grep -qF "## [$VERSION] - $TODAY" CHANGELOG.md
+
+      - name: Commit, tag, and push
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add main.go README.md CHANGELOG.md
+          git commit -m "Release $VERSION"
+          git tag -a "$VERSION" -m "Release $VERSION"
+          git push origin master
+          git push origin "$VERSION"
+
+      - name: Summary
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
+          {
+            echo "## Release $VERSION cut"
+            echo ""
+            echo "Tag \`$VERSION\` pushed. The [Release workflow](https://github.com/fanis/claude-code-switcher/actions/workflows/release.yml) now builds and publishes it (then WinGet and Scoop)."
+            echo ""
+            echo "Chocolatey stays manual: run *Publish to Chocolatey* with version \`$VERSION\` when wanted."
+          } >> "$GITHUB_STEP_SUMMARY"

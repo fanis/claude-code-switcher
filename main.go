@@ -6,18 +6,12 @@ package main
 import (
 	"errors"
 	"runtime"
-	"syscall"
-	"unsafe"
 
 	"github.com/fanis/claude-code-switcher/internal/config"
 	"github.com/fanis/claude-code-switcher/internal/gui"
 	"github.com/fanis/claude-code-switcher/internal/projects"
+	"github.com/fanis/claude-code-switcher/internal/win32"
 )
-
-func utf16PtrFromString(s string) uintptr {
-	p, _ := syscall.UTF16PtrFromString(s)
-	return uintptr(unsafe.Pointer(p))
-}
 
 const appVersion = "0.3.1"
 
@@ -48,16 +42,5 @@ func main() {
 }
 
 func showError(title, message string) {
-	user32 := syscall.NewLazyDLL("user32.dll")
-	messageBox := user32.NewProc("MessageBoxW")
-
-	const MB_OK = 0x00000000
-	const MB_ICONERROR = 0x00000010
-
-	messageBox.Call(
-		0,
-		utf16PtrFromString(message),
-		utf16PtrFromString(title),
-		MB_OK|MB_ICONERROR,
-	)
+	win32.MessageBox(0, message, title, win32.MB_OK|win32.MB_ICONERROR)
 }
