@@ -13,7 +13,7 @@ import (
 	"github.com/fanis/claude-code-switcher/internal/win32"
 )
 
-const appVersion = "0.3.1"
+const appVersion = "0.3.2"
 
 func main() {
 	// Win32 GUI operations must all happen on the same OS thread.
