@@ -20,6 +20,13 @@ jobs:
   winget:
     runs-on: ubuntu-latest
     steps:
+      # Sync the winget-pkgs fork with upstream first. A fork that has drifted far
+      # behind makes komac's branch creation fail with a misleading
+      # "does not have the correct permissions to execute CreateRef" error.
+      - name: Sync winget-pkgs fork with upstream
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: gh api repos/fanis/winget-pkgs/merge-upstream -f branch=master
       - uses: vedantmgoyal9/winget-releaser@v2
         with:
           identifier: Fanis.ClaudeCodeSwitcher

@@ -122,6 +122,14 @@ Alternatively run the `Cut Release` workflow (`cut-release.yml`) from the GitHub
 - The workflow packs from a clean `chocopack/` staging directory, never the repo root, so `.gitignore` etc. cannot leak into the `.nupkg` (chocolatey moderators reject packages containing source-control ignore files).
 - Manually republish against an existing GitHub release without a new tag: `gh workflow run chocolatey.yml -R fanis/claude-code-switcher -f version=X.Y.Z`. Useful when moderators flag a package fix.
 - PowerShell here-string gotcha: `$version:` parses as a scope/drive reference and breaks the here-string. Always use `${version}:` when a variable is followed by `:`. Same applies to other interpolated variables.
+- Chocolatey rule docs (`docs.chocolatey.org/.../rules/cpmrNNNN/`) return 403 to WebFetch. Fetch with `curl -sL -A "Mozilla/5.0"` instead. CPMR rule titles state their own trigger condition (e.g. CPMR0005/0006 say "when binaries included").
+
+### WinGet package
+
+- The winget workflow (winget-releaser/komac) opens a PR to `microsoft/winget-pkgs` from the `fanis/winget-pkgs` fork. If the fork has drifted far behind upstream, komac's branch creation fails with a misleading `does not have the correct permissions to execute CreateRef` error (hit 2026-07-06 with the fork 42k commits behind). The workflow now syncs the fork via the `merge-upstream` API before running the releaser.
+- `WINGET_TOKEN` must be a classic PAT with `public_repo` scope; fine-grained PATs are not supported by winget-releaser/komac.
+- Manually republish against an existing GitHub release without a new tag: `gh workflow run winget.yml -R fanis/claude-code-switcher -f version=X.Y.Z`.
+- GitHub GraphQL write mutations (branch/commit creation) can intermittently return 500 "Something went wrong" or bare nginx 502 errors even when githubstatus.com shows all green; retry after 10-15 minutes before suspecting the token or fork.
 
 ### License file
 
